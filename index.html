@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tailor Marketplace | Home</title>
+    <link rel="stylesheet" href="assets/css/styles.css" />
+  </head>
+  <body>
+    <!-- This header appears at the top of the page and helps visitors move around the site. -->
+    <header class="site-header">
+      <div class="container nav-wrap">
+        <a class="brand" href="index.html">Tailor Marketplace</a>
+
+        <!-- This button is used on small screens to show or hide the navigation links. -->
+        <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-navigation">
+          Menu
+        </button>
+
+        <!-- These are the main links to the starter pages in the project. -->
+        <nav id="site-navigation" class="site-nav">
+          <a href="index.html" data-page="home">Home</a>
+          <a href="pages/tailors.html" data-page="tailors">Find Tailors</a>
+          <a href="pages/how-it-works.html" data-page="how-it-works">How It Works</a>
+          <a href="pages/contact.html" data-page="contact">Contact</a>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <!-- The hero section gives a quick explanation of the website's purpose. -->
+      <section class="hero">
+        <div class="container hero-grid">
+          <div>
+            <p class="eyebrow">Simple starter homepage</p>
+            <h1>Connect customers with talented local tailors.</h1>
+            <p class="intro">
+              This starter homepage gives your project a clean place to introduce the marketplace,
+              explain the value, and guide visitors to the next step.
+            </p>
+            <div class="button-row">
+              <a class="button button-primary" href="pages/tailors.html">Browse Tailors</a>
+              <a class="button button-secondary" href="pages/how-it-works.html">Learn More</a>
+            </div>
+          </div>
+
+          <!-- This card acts as a visual placeholder for future featured content. -->
+          <aside class="card feature-card">
+            <h2>Placeholder: Featured Tailor</h2>
+            <p>
+              Add a featured tailor, seasonal promotion, or quick summary here when you connect the
+              frontend to real data later.
+            </p>
+            <ul class="feature-list">
+              <li>Custom suits and dresses</li>
+              <li>Alterations and repairs</li>
+              <li>Pickup, delivery, or appointments</li>
+            </ul>
+          </aside>
+        </div>
+      </section>
+
+      <!-- This section shows a few simple blocks that explain the service. -->
+      <section class="section">
+        <div class="container">
+          <div class="section-heading">
+            <p class="eyebrow">Placeholder sections</p>
+            <h2>What visitors can do here</h2>
+          </div>
+
+          <div class="card-grid">
+            <article class="card">
+              <h3>Discover makers</h3>
+              <p>Show nearby tailors, specialties, pricing, ratings, and availability.</p>
+            </article>
+            <article class="card">
+              <h3>Compare services</h3>
+              <p>Use this area later for categories such as alterations, bridal, or custom design.</p>
+            </article>
+            <article class="card">
+              <h3>Book with confidence</h3>
+              <p>Add account tools, order tracking, and secure payment information in future versions.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- The footer gives the project a finished look and is shared across pages. -->
+    <footer class="site-footer">
+      <div class="container footer-wrap">
+        <p>© <span id="current-year"></span> Tailor Marketplace. Initial frontend scaffold.</p>
+      </div>
+    </footer>
+
+    <script src="assets/js/main.js"></script>
+  </body>
+</html>
