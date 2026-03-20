@@ -27,6 +27,10 @@ const API_ENDPOINTS = {
 // Keep the auth token storage key in one place so login and authenticated requests stay aligned.
 const AUTH_TOKEN_KEY = 'tailorMarketplaceToken';
 
+// Keep the shared login page path in one place so logout and expired-session
+// redirects always send the user to the same screen.
+const LOGIN_PAGE_PATH = 'login.html';
+
 // Build the full API URL from the shared base URL and one endpoint path.
 const buildApiUrl = (endpointPath) => `${XANO_BASE_URL}${endpointPath}`;
 
@@ -39,6 +43,28 @@ const buildApiUrl = (endpointPath) => `${XANO_BASE_URL}${endpointPath}`;
   - Returning an empty string when no token exists keeps later checks simple.
 */
 const getAuthToken = () => localStorage.getItem(AUTH_TOKEN_KEY) || '';
+
+// Remove the saved auth token. Keeping this in one helper makes logout and
+// expired-session cleanup easier to reuse across pages.
+const clearAuthToken = () => localStorage.removeItem(AUTH_TOKEN_KEY);
+
+// Send the user to the shared login page. The basePath value lets the same
+// helper work from both the home page and files inside /pages.
+const redirectToLoginPage = (basePath = '..') => {
+  const loginPath = basePath === '.' ? `./pages/${LOGIN_PAGE_PATH}` : LOGIN_PAGE_PATH;
+  window.location.href = loginPath;
+};
+
+// Keep unauthorized checks in one beginner-friendly helper so page scripts can
+// clearly say what they are looking for.
+const isUnauthorizedResponse = (result) => {
+  if (!result) {
+    return false;
+  }
+
+  const errorMessage = typeof result.errorMessage === 'string' ? result.errorMessage.toLowerCase() : '';
+  return result.status === 401 || errorMessage.includes('unauthorized');
+};
 
 /*
   Build the Authorization header for authenticated requests.
@@ -199,8 +225,12 @@ window.TailorMarketplaceApi = {
   XANO_BASE_URL,
   API_ENDPOINTS,
   AUTH_TOKEN_KEY,
+  LOGIN_PAGE_PATH,
   buildApiUrl,
   getAuthToken,
+  clearAuthToken,
+  redirectToLoginPage,
+  isUnauthorizedResponse,
   getAuthHeaders,
   safeParseJson,
   createApiResult,

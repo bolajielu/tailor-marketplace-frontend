@@ -10,6 +10,7 @@ const navItems = [
 
 const basePath = document.body.dataset.basePath || '.';
 const currentPage = document.body.dataset.page || 'home';
+const authTokenKey = 'tailorMarketplaceToken';
 
 const resolvePath = (href) => {
   if (basePath === '.') {
@@ -18,6 +19,10 @@ const resolvePath = (href) => {
 
   return href.startsWith('pages/') ? href.replace('pages/', '') : `../${href}`;
 };
+
+// Keep the shared login destination in one small helper so both the logout
+// button and future navigation updates can send the user to the same page.
+const getLoginPagePath = () => resolvePath('pages/login.html');
 
 const layoutRoot = document.querySelector('#app-shell');
 
@@ -41,6 +46,7 @@ layoutRoot.innerHTML = `
             return `<a class="nav-link ${activeClass}" href="${resolvePath(item.href)}">${item.label}</a>`;
           })
           .join('')}
+        <button class="nav-link nav-logout-button" id="logout-button" type="button">Logout</button>
       </nav>
     </header>
     <main id="page-content" class="page-content"></main>
@@ -56,9 +62,18 @@ layoutRoot.innerHTML = `
 
 const navToggle = document.querySelector('.nav-toggle');
 const siteNav = document.querySelector('.site-nav');
+const logoutButton = document.querySelector('#logout-button');
 
 navToggle.addEventListener('click', () => {
   const isExpanded = navToggle.getAttribute('aria-expanded') === 'true';
   navToggle.setAttribute('aria-expanded', String(!isExpanded));
   siteNav.classList.toggle('is-open');
+});
+
+// Keep logout behavior small and easy to follow:
+// 1. Remove the saved token.
+// 2. Send the user back to the shared login page.
+logoutButton.addEventListener('click', () => {
+  localStorage.removeItem(authTokenKey);
+  window.location.href = getLoginPagePath();
 });
