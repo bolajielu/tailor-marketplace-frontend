@@ -343,25 +343,25 @@ if (pageKey === 'login') {
     loginSubmitButton.disabled = true;
 
     try {
-      const response = await window.TailorMarketplaceApi.loginUser({
+      const result = await window.TailorMarketplaceApi.loginUser({
         email: emailValue,
         password: passwordValue,
       });
 
-      // Parse the API response as JSON so the page can show clear feedback.
-      const responseData = await response.json();
-
-      if (!response.ok) {
-        const errorMessage = responseData.message || responseData.error || 'Login failed. Please try again.';
-        updateLoginMessage(errorMessage, 'is-error');
+      if (!result.ok) {
+        updateLoginMessage(result.errorMessage || 'Login failed. Please try again.', 'is-error');
         return;
       }
+
+      // The safer API helper already tried to read JSON for us.
+      // If the backend returned an empty body or invalid JSON, result.data will be null.
+      const responseData = result.data;
 
       // Store the real Xano auth token after a successful login.
       // Example: localStorage.setItem('tailorMarketplaceToken', responseData.authToken);
       // Replace `responseData.authToken` with the actual token field returned by your Xano login API.
 
-      updateLoginMessage('Login successful. Your account response was received.', 'is-success');
+      updateLoginMessage('Login successful. Your account response was handled safely.', 'is-success');
 
       // Do not redirect until you are ready to connect the successful response
       // to the next page in your real application flow.
@@ -424,21 +424,20 @@ if (pageKey === 'signup') {
     signupSubmitButton.disabled = true;
 
     try {
-      const response = await window.TailorMarketplaceApi.signupUser({
+      const result = await window.TailorMarketplaceApi.signupUser({
         fullName: nameValue,
         email: emailValue,
         password: passwordValue,
       });
 
-      // Parse the response body as JSON so this page can read success details
-      // or backend error messages returned from the centralized API helper.
-      const responseData = await response.json();
-
-      if (!response.ok) {
-        const errorMessage = responseData.message || responseData.error || 'Signup failed. Please try again.';
-        updateSignupMessage(errorMessage, 'is-error');
+      if (!result.ok) {
+        updateSignupMessage(result.errorMessage || 'Signup failed. Please try again.', 'is-error');
         return;
       }
+
+      // The safer API helper already tried to read JSON for us.
+      // If the backend returned an empty body or invalid JSON, result.data will be null.
+      const responseData = result.data;
 
       // Store the real Xano auth token here after a successful signup.
       // Example: localStorage.setItem('tailorMarketplaceToken', responseData.authToken);
@@ -448,7 +447,7 @@ if (pageKey === 'signup') {
       // Example: localStorage.setItem('tailorMarketplaceUser', JSON.stringify(responseData.user));
       // Replace `responseData.user` with the real user data shape returned by your Xano API.
 
-      updateSignupMessage('Signup successful. Your account response was received.', 'is-success');
+      updateSignupMessage('Signup successful. Your account response was handled safely.', 'is-success');
 
       // Do not redirect yet. Wait until your real signup response is successful
       // and you know which page the user should visit next.
