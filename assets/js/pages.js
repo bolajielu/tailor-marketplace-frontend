@@ -31,16 +31,22 @@ const pageContent = {
     ],
   },
   signup: {
-    heroEyebrow: 'Get Started',
-    heroTitle: 'Create an account to book services or manage your tailoring business.',
+    heroEyebrow: 'Join the Marketplace',
+    heroTitle: 'Create your Tailor Marketplace account in a clean, welcoming signup flow.',
     heroText:
-      'The layout stays consistent while leaving plenty of room for onboarding forms, verification steps, and role selection.',
+      'Use this polished signup page to register as a customer or tailor partner while keeping the shared header, navigation, and footer in place.',
+    formTitle: 'Create your account',
+    formText:
+      'Fill out the form below to get started. This is a UI-only form for now and can be connected to a Xano signup endpoint later.',
+    validationDefault: 'Complete the form to create your account.',
+    loginPrompt: 'Already have an account?',
+    loginHref: 'login.html',
     primaryAction: { label: 'Browse Tailors', href: 'tailors.html' },
-    secondaryAction: { label: 'Already registered?', href: 'login.html' },
+    secondaryAction: { label: 'Go to Login', href: 'login.html' },
     highlights: [
-      { title: 'Clear entry points', text: 'Separate actions help both customers and tailor partners get started.' },
-      { title: 'Responsive structure', text: 'Cards and actions stack neatly on smaller screens.' },
-      { title: 'Scalable foundation', text: 'Shared styles make future signup flows easier to add.' },
+      { title: 'Friendly onboarding', text: 'A guided form helps new users understand exactly what information to enter.' },
+      { title: 'Consistent experience', text: 'The signup page matches the login page so account access feels connected across the site.' },
+      { title: 'Ready for API wiring', text: 'Simple validation and clear comments make future Xano integration easier to follow.' },
     ],
   },
   dashboard: {
@@ -141,6 +147,102 @@ const renderStandardPage = () => `
   </section>
 `;
 
+const renderSignupPage = () => `
+  <section class="login-layout">
+    <article class="login-intro hero-copy">
+      <span class="eyebrow">${page.heroEyebrow}</span>
+      <h1>${page.heroTitle}</h1>
+      <p>${page.heroText}</p>
+      <div class="hero-actions">
+        <a class="button button-primary" href="${localPath(page.primaryAction.href)}">${page.primaryAction.label}</a>
+        <a class="button button-secondary" href="${localPath(page.secondaryAction.href)}">${page.secondaryAction.label}</a>
+      </div>
+    </article>
+
+    <section class="login-card" aria-labelledby="signup-form-title">
+      <div class="login-card-header">
+        <span class="panel-label">Create Profile</span>
+        <h2 id="signup-form-title">${page.formTitle}</h2>
+        <p>${page.formText}</p>
+      </div>
+
+      <form class="login-form" id="signup-form" novalidate>
+        <div class="form-field">
+          <label for="signup-name">Full name</label>
+          <input
+            id="signup-name"
+            name="fullName"
+            type="text"
+            autocomplete="name"
+            placeholder="Enter your full name"
+            required
+          />
+        </div>
+
+        <div class="form-field">
+          <label for="signup-email">Email address</label>
+          <input
+            id="signup-email"
+            name="email"
+            type="email"
+            autocomplete="email"
+            placeholder="you@example.com"
+            required
+          />
+        </div>
+
+        <div class="signup-password-grid">
+          <div class="form-field">
+            <label for="signup-password">Password</label>
+            <input
+              id="signup-password"
+              name="password"
+              type="password"
+              autocomplete="new-password"
+              placeholder="Create a password"
+              required
+            />
+          </div>
+
+          <div class="form-field">
+            <label for="signup-confirm-password">Confirm password</label>
+            <input
+              id="signup-confirm-password"
+              name="confirmPassword"
+              type="password"
+              autocomplete="new-password"
+              placeholder="Re-enter your password"
+              required
+            />
+          </div>
+        </div>
+
+        <p class="validation-message" id="signup-message" aria-live="polite">${page.validationDefault}</p>
+
+        <button class="button button-primary login-submit" type="submit">Create Account</button>
+
+        <p class="form-support-copy">
+          ${page.loginPrompt}
+          <a class="text-link" href="${localPath(page.loginHref)}">Log in here</a>
+        </p>
+      </form>
+    </section>
+  </section>
+
+  <section class="feature-grid" aria-label="Signup page highlights">
+    ${page.highlights
+      .map(
+        (item) => `
+          <article class="feature-card">
+            <h2>${item.title}</h2>
+            <p>${item.text}</p>
+          </article>
+        `,
+      )
+      .join('')}
+  </section>
+`;
+
 const renderLoginPage = () => `
   <section class="login-layout">
     <article class="login-intro hero-copy">
@@ -202,7 +304,8 @@ const renderLoginPage = () => `
   </section>
 `;
 
-contentRoot.innerHTML = pageKey === 'login' ? renderLoginPage() : renderStandardPage();
+contentRoot.innerHTML =
+  pageKey === 'login' ? renderLoginPage() : pageKey === 'signup' ? renderSignupPage() : renderStandardPage();
 
 if (pageKey === 'login') {
   const loginForm = document.querySelector('#login-form');
@@ -232,5 +335,54 @@ if (pageKey === 'login') {
 
     loginMessage.textContent = 'Login form submitted successfully. Connect this action to your Xano API when ready.';
     loginMessage.className = 'validation-message is-success';
+  });
+}
+
+if (pageKey === 'signup') {
+  const signupForm = document.querySelector('#signup-form');
+  const signupMessage = document.querySelector('#signup-message');
+
+  // This simple signup handler keeps the validation steps easy to read.
+  // It can later be extended with a fetch() call to a Xano signup endpoint.
+  signupForm.addEventListener('submit', (event) => {
+    event.preventDefault();
+
+    const nameInput = document.querySelector('#signup-name');
+    const emailInput = document.querySelector('#signup-email');
+    const passwordInput = document.querySelector('#signup-password');
+    const confirmPasswordInput = document.querySelector('#signup-confirm-password');
+
+    const nameValue = nameInput.value.trim();
+    const emailValue = emailInput.value.trim();
+    const passwordValue = passwordInput.value.trim();
+    const confirmPasswordValue = confirmPasswordInput.value.trim();
+
+    if (!nameValue || !emailValue || !passwordValue || !confirmPasswordValue) {
+      signupMessage.textContent = 'Please complete every field before creating your account.';
+      signupMessage.className = 'validation-message is-error';
+      return;
+    }
+
+    if (!emailInput.checkValidity()) {
+      signupMessage.textContent = 'Please enter a valid email address before submitting the form.';
+      signupMessage.className = 'validation-message is-error';
+      return;
+    }
+
+    if (passwordValue.length < 8) {
+      signupMessage.textContent = 'Please choose a password that is at least 8 characters long.';
+      signupMessage.className = 'validation-message is-error';
+      return;
+    }
+
+    if (passwordValue !== confirmPasswordValue) {
+      signupMessage.textContent = 'Your password and confirm password fields must match.';
+      signupMessage.className = 'validation-message is-error';
+      return;
+    }
+
+    signupMessage.textContent =
+      'Signup form submitted successfully. Connect this action to your Xano signup API when ready.';
+    signupMessage.className = 'validation-message is-success';
   });
 }
