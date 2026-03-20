@@ -10,9 +10,9 @@
   exposes one shared object on window: window.TailorMarketplaceApi.
 */
 
-// Replace this placeholder with your real Xano base URL later.
-// Example format: https://your-xano-instance.xano.io/api:example123
-const XANO_BASE_URL = 'https://your-xano-base-url-here';
+// Real Xano base URL for the shared Tailor Marketplace backend.
+// Keeping this value here means pages only call helper functions instead of hardcoding URLs.
+const XANO_BASE_URL = 'https://x8ki-letl-twmt.n7.xano.io/api:7K6R8GYB';
 
 // Keep every API path in one central place so URLs are not repeated across files.
 const API_ENDPOINTS = {
@@ -132,6 +132,8 @@ const postRequest = (endpointPath, data = {}, options = {}) => {
 };
 
 // Authentication helpers keep login and signup endpoint configuration centralized.
+// The login helper sends { email, password } to Xano and returns one shared result shape.
+// Future authenticated requests can read the saved token from localStorage and send it in an Authorization header.
 const loginUser = (loginData) => postRequest(API_ENDPOINTS.login, loginData);
 const signupUser = (signupData) => postRequest(API_ENDPOINTS.signup, signupData);
 const getCurrentUser = () => getRequest(API_ENDPOINTS.currentUser);
