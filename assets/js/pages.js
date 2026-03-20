@@ -437,7 +437,7 @@ if (pageKey === 'login') {
 
       // Store the auth token in localStorage so future authenticated requests
       // can read it and send it back to Xano in an Authorization header.
-      localStorage.setItem('tailorMarketplaceToken', authToken);
+      localStorage.setItem(window.TailorMarketplaceApi.AUTH_TOKEN_KEY, authToken);
 
       updateLoginMessage('Login successful! Redirecting you to the dashboard...', 'is-success');
 
@@ -543,6 +543,14 @@ if (pageKey === 'dashboard') {
   const dashboardUserCard = document.querySelector('#dashboard-user-card');
   const apiHelpers = window.TailorMarketplaceApi;
   const authToken = apiHelpers.getAuthToken();
+  const currentBasePath = document.body.dataset.basePath || '..';
+
+  // When the dashboard sees an expired or unauthorized session, use one shared
+  // helper to clear the token and send the visitor back to login.
+  const clearSessionAndGoToLogin = () => {
+    apiHelpers.clearAuthToken();
+    apiHelpers.redirectToLoginPage(currentBasePath);
+  };
 
   const renderUserFields = (userData) => {
     const userEntries = Object.entries(userData || {}).slice(0, 6);
@@ -595,7 +603,7 @@ if (pageKey === 'dashboard') {
   // Protect the dashboard before making the authenticated request.
   // If there is no saved token, the visitor is sent back to the login page.
   if (!authToken) {
-    window.location.href = 'login.html';
+    clearSessionAndGoToLogin();
   } else {
     (async () => {
       updateDashboardState({
@@ -620,6 +628,31 @@ if (pageKey === 'dashboard') {
         const result = await apiHelpers.getCurrentUser();
 
         if (!result.ok) {
+          if (apiHelpers.isUnauthorizedResponse(result)) {
+            updateDashboardState({
+              title: 'Your session has expired.',
+              description: 'The current user request came back as unauthorized, so we are clearing your saved token now.',
+              welcomeTitle: 'Please log in again',
+              welcomeText: 'Redirecting you to the login page so you can start a fresh session.',
+              userFields: `
+                <div>
+                  <dt>Status</dt>
+                  <dd>Unauthorized session</dd>
+                </div>
+                <div>
+                  <dt>Next step</dt>
+                  <dd>Clearing token and redirecting to login...</dd>
+                </div>
+              `,
+              stateClass: 'is-error',
+            });
+
+            window.setTimeout(() => {
+              clearSessionAndGoToLogin();
+            }, 800);
+            return;
+          }
+
           updateDashboardState({
             title: 'We could not load your dashboard.',
             description: result.errorMessage || 'The protected current user request was not successful.',

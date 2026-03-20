@@ -110,6 +110,12 @@ button {
   color: var(--text);
 }
 
+.nav-logout-button {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
 .nav-toggle {
   display: none;
   border: 0;
