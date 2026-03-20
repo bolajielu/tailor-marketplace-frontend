@@ -18,7 +18,7 @@ const pageContent = {
     heroText:
       'Use this clean login form to continue into the Tailor Marketplace experience while keeping the shared header, navigation, and footer in place.',
     formTitle: 'Login to your account',
-    formText: 'Enter your details below to continue. This is a UI-only form for now and can be connected to Xano later.',
+    formText: 'Enter your email and password below to sign in through the live Xano backend and continue to your dashboard.',
     forgotPasswordText: 'Forgot password?',
     forgotPasswordHref: '#',
     validationDefault: 'Use the form to enter your email and password.',
@@ -27,7 +27,7 @@ const pageContent = {
     highlights: [
       { title: 'Simple sign-in flow', text: 'Email and password inputs keep the page focused on the essentials.' },
       { title: 'Helpful feedback area', text: 'A built-in validation message space makes future form logic easier to follow.' },
-      { title: 'Ready for backend setup', text: 'The submit handler is clearly commented so Xano integration can be added later.' },
+      { title: 'Connected to Xano', text: 'The login form now uses the shared API helper to send your email and password to the live backend.' },
     ],
   },
   signup: {
@@ -353,18 +353,23 @@ if (pageKey === 'login') {
         return;
       }
 
-      // The safer API helper already tried to read JSON for us.
-      // If the backend returned an empty body or invalid JSON, result.data will be null.
-      const responseData = result.data;
+      // The shared API helper already parsed the Xano JSON response for us.
+      // We expect the auth token to live at result.data.auth_token after a successful login.
+      const authToken = result.data && result.data.auth_token;
 
-      // Store the real Xano auth token after a successful login.
-      // Example: localStorage.setItem('tailorMarketplaceToken', responseData.authToken);
-      // Replace `responseData.authToken` with the actual token field returned by your Xano login API.
+      if (!authToken) {
+        updateLoginMessage('Login succeeded, but no auth token was returned by Xano.', 'is-error');
+        return;
+      }
 
-      updateLoginMessage('Login successful. Your account response was handled safely.', 'is-success');
+      // Store the auth token in localStorage so future authenticated requests
+      // can read it and send it back to Xano in an Authorization header.
+      localStorage.setItem('tailorMarketplaceToken', authToken);
 
-      // Do not redirect until you are ready to connect the successful response
-      // to the next page in your real application flow.
+      updateLoginMessage('Login successful! Redirecting you to the dashboard...', 'is-success');
+
+      // Redirect to the shared dashboard page after the token is saved.
+      window.location.href = `${base}/pages/dashboard.html`;
     } catch (error) {
       updateLoginMessage('We could not reach the login service. Please try again in a moment.', 'is-error');
     } finally {
