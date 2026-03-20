@@ -28,12 +28,77 @@ const API_ENDPOINTS = {
 const buildApiUrl = (endpointPath) => `${XANO_BASE_URL}${endpointPath}`;
 
 /*
+  Safely read JSON from a fetch() response.
+
+  Why this helper matters:
+  - Some responses may have no body at all.
+  - Some responses may return plain text or broken JSON.
+  - Beginner-friendly pages should not crash just because response.json()
+    throws an error.
+
+  This helper returns:
+  - parsed JSON data when parsing works
+  - null when the body is empty or invalid JSON
+*/
+const safeParseJson = async (response) => {
+  const responseText = await response.text();
+
+  if (!responseText || !responseText.trim()) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(responseText);
+  } catch (error) {
+    return null;
+  }
+};
+
+/*
+  Turn a fetch response into one simple object shape that pages can use.
+
+  Returned shape:
+  {
+    ok: boolean,
+    status: number,
+    data: any,
+    errorMessage: string | null
+  }
+
+  This keeps page code easy to read because every request result follows the
+  same pattern.
+*/
+const createApiResult = async (response) => {
+  const data = await safeParseJson(response);
+  let errorMessage = null;
+
+  if (!response.ok) {
+    if (data && typeof data === 'object') {
+      errorMessage = data.message || data.error || null;
+    }
+
+    if (!errorMessage) {
+      errorMessage = `Request failed with status ${response.status}.`;
+    }
+  }
+
+  return {
+    ok: response.ok,
+    status: response.status,
+    data,
+    errorMessage,
+  };
+};
+
+/*
   Shared request helper.
 
   Use this function whenever a page needs to talk to Xano.
   It accepts:
   - endpointPath: one of the values from API_ENDPOINTS
   - options: regular fetch() options such as method, headers, and body
+
+  It returns the beginner-friendly result object created by createApiResult().
 */
 const apiRequest = async (endpointPath, options = {}) => {
   const requestOptions = {
@@ -46,10 +111,7 @@ const apiRequest = async (endpointPath, options = {}) => {
   };
 
   const response = await fetch(buildApiUrl(endpointPath), requestOptions);
-
-  // Return the raw response for now so future pages can decide how to handle
-  // loading states, JSON parsing, errors, and auth tokens.
-  return response;
+  return createApiResult(response);
 };
 
 // Simple helper for GET requests.
@@ -69,7 +131,7 @@ const postRequest = (endpointPath, data = {}, options = {}) => {
   });
 };
 
-// Authentication helpers.
+// Authentication helpers keep login and signup endpoint configuration centralized.
 const loginUser = (loginData) => postRequest(API_ENDPOINTS.login, loginData);
 const signupUser = (signupData) => postRequest(API_ENDPOINTS.signup, signupData);
 const getCurrentUser = () => getRequest(API_ENDPOINTS.currentUser);
@@ -84,6 +146,8 @@ window.TailorMarketplaceApi = {
   XANO_BASE_URL,
   API_ENDPOINTS,
   buildApiUrl,
+  safeParseJson,
+  createApiResult,
   apiRequest,
   getRequest,
   postRequest,
