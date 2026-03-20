@@ -51,15 +51,15 @@ const pageContent = {
   },
   dashboard: {
     heroEyebrow: 'Dashboard',
-    heroTitle: 'Track tailoring operations from a focused control center.',
+    heroTitle: 'Your account overview is loaded from the live Xano session.',
     heroText:
-      'Use this page for business metrics, appointment summaries, and customer updates while preserving the global site structure.',
+      'This protected page checks for a saved auth token, requests the current user from the shared API helper, and shows a beginner-friendly loading, success, or error state.',
     primaryAction: { label: 'View My Bookings', href: 'bookings.html' },
     secondaryAction: { label: 'Read Reviews', href: 'reviews.html' },
     highlights: [
-      { title: 'At-a-glance overview', text: 'Surface the status of appointments, orders, and client messages.' },
-      { title: 'Fast navigation', text: 'Move from management tools to public content without losing context.' },
-      { title: 'Professional UI', text: 'A restrained visual system keeps the dashboard feeling trustworthy.' },
+      { title: 'Protected route behavior', text: 'Visitors without a saved token are redirected to the login page before dashboard data loads.' },
+      { title: 'Live user data', text: 'The current user request uses the centralized API helper instead of hardcoding URLs inside the page script.' },
+      { title: 'Clear status messaging', text: 'Loading, error, and success states make the dashboard easy to understand and extend.' },
     ],
   },
   tailors: {
@@ -111,6 +111,16 @@ const base = document.body.dataset.basePath || '.';
 const localPath = (href) => {
   if (base === '.') return href;
   return href.startsWith('../') ? href : href;
+};
+
+// Read the most helpful display name that exists in the current user object.
+// Xano responses can vary, so this helper checks a few common field names.
+const getUserDisplayName = (userData) => {
+  if (!userData || typeof userData !== 'object') {
+    return 'there';
+  }
+
+  return userData.name || userData.full_name || userData.fullName || userData.first_name || userData.firstName || userData.email || 'there';
 };
 
 const renderStandardPage = () => `
@@ -304,8 +314,71 @@ const renderLoginPage = () => `
   </section>
 `;
 
+// The dashboard starts with a loading state and then updates after the protected
+// /auth/me request finishes.
+const renderDashboardShell = () => `
+  <section class="hero-card">
+    <article class="hero-copy">
+      <span class="eyebrow">${page.heroEyebrow}</span>
+      <h1>${page.heroTitle}</h1>
+      <p>${page.heroText}</p>
+      <div class="hero-actions">
+        <a class="button button-primary" href="${localPath(page.primaryAction.href)}">${page.primaryAction.label}</a>
+        <a class="button button-secondary" href="${localPath(page.secondaryAction.href)}">${page.secondaryAction.label}</a>
+      </div>
+    </article>
+
+    <aside class="hero-panel dashboard-status-panel" id="dashboard-status-panel" aria-live="polite">
+      <p class="panel-label">Dashboard Status</p>
+      <h2>Checking your session...</h2>
+      <p>We are reading your saved token and loading your current user profile from Xano.</p>
+    </aside>
+  </section>
+
+  <section class="dashboard-grid" aria-label="Dashboard overview">
+    <article class="feature-card dashboard-welcome-card" id="dashboard-welcome-card">
+      <span class="panel-label">Welcome</span>
+      <h2>Loading your account</h2>
+      <p>Please wait while we request the current logged-in user from the protected endpoint.</p>
+    </article>
+
+    <article class="feature-card dashboard-user-card" id="dashboard-user-card">
+      <span class="panel-label">Current User</span>
+      <dl class="dashboard-user-list">
+        <div>
+          <dt>Status</dt>
+          <dd>Loading...</dd>
+        </div>
+        <div>
+          <dt>Token</dt>
+          <dd>Found in localStorage</dd>
+        </div>
+      </dl>
+    </article>
+  </section>
+
+  <section class="feature-grid" aria-label="Dashboard highlights">
+    ${page.highlights
+      .map(
+        (item) => `
+          <article class="feature-card">
+            <h2>${item.title}</h2>
+            <p>${item.text}</p>
+          </article>
+        `,
+      )
+      .join('')}
+  </section>
+`;
+
 contentRoot.innerHTML =
-  pageKey === 'login' ? renderLoginPage() : pageKey === 'signup' ? renderSignupPage() : renderStandardPage();
+  pageKey === 'login'
+    ? renderLoginPage()
+    : pageKey === 'signup'
+      ? renderSignupPage()
+      : pageKey === 'dashboard'
+        ? renderDashboardShell()
+        : renderStandardPage();
 
 if (pageKey === 'login') {
   const loginForm = document.querySelector('#login-form');
@@ -462,4 +535,141 @@ if (pageKey === 'signup') {
       signupSubmitButton.disabled = false;
     }
   });
+}
+
+if (pageKey === 'dashboard') {
+  const dashboardStatusPanel = document.querySelector('#dashboard-status-panel');
+  const dashboardWelcomeCard = document.querySelector('#dashboard-welcome-card');
+  const dashboardUserCard = document.querySelector('#dashboard-user-card');
+  const apiHelpers = window.TailorMarketplaceApi;
+  const authToken = apiHelpers.getAuthToken();
+
+  const renderUserFields = (userData) => {
+    const userEntries = Object.entries(userData || {}).slice(0, 6);
+
+    if (!userEntries.length) {
+      return `
+        <div>
+          <dt>Profile</dt>
+          <dd>No user fields were returned by the current user endpoint.</dd>
+        </div>
+      `;
+    }
+
+    return userEntries
+      .map(
+        ([key, value]) => `
+          <div>
+            <dt>${key}</dt>
+            <dd>${String(value)}</dd>
+          </div>
+        `,
+      )
+      .join('');
+  };
+
+  const updateDashboardState = ({ title, description, welcomeTitle, welcomeText, userFields, stateClass }) => {
+    dashboardStatusPanel.className = `hero-panel dashboard-status-panel ${stateClass}`.trim();
+    dashboardStatusPanel.innerHTML = `
+      <p class="panel-label">Dashboard Status</p>
+      <h2>${title}</h2>
+      <p>${description}</p>
+    `;
+
+    dashboardWelcomeCard.className = `feature-card dashboard-welcome-card ${stateClass}`.trim();
+    dashboardWelcomeCard.innerHTML = `
+      <span class="panel-label">Welcome</span>
+      <h2>${welcomeTitle}</h2>
+      <p>${welcomeText}</p>
+    `;
+
+    dashboardUserCard.className = `feature-card dashboard-user-card ${stateClass}`.trim();
+    dashboardUserCard.innerHTML = `
+      <span class="panel-label">Current User</span>
+      <dl class="dashboard-user-list">
+        ${userFields}
+      </dl>
+    `;
+  };
+
+  // Protect the dashboard before making the authenticated request.
+  // If there is no saved token, the visitor is sent back to the login page.
+  if (!authToken) {
+    window.location.href = 'login.html';
+  } else {
+    (async () => {
+      updateDashboardState({
+        title: 'Loading your dashboard...',
+        description: 'Your token was found, so we are now calling the protected current user endpoint.',
+        welcomeTitle: 'Welcome back',
+        welcomeText: 'Please wait while your account details load from Xano.',
+        userFields: `
+          <div>
+            <dt>Status</dt>
+            <dd>Loading current user data...</dd>
+          </div>
+          <div>
+            <dt>Request</dt>
+            <dd>GET /auth/me with Bearer token</dd>
+          </div>
+        `,
+        stateClass: 'is-loading',
+      });
+
+      try {
+        const result = await apiHelpers.getCurrentUser();
+
+        if (!result.ok) {
+          updateDashboardState({
+            title: 'We could not load your dashboard.',
+            description: result.errorMessage || 'The protected current user request was not successful.',
+            welcomeTitle: 'Your session needs attention',
+            welcomeText: 'Please try logging in again if your token has expired or is no longer valid.',
+            userFields: `
+              <div>
+                <dt>Status</dt>
+                <dd>Error loading current user</dd>
+              </div>
+              <div>
+                <dt>Next step</dt>
+                <dd>Return to the login page and sign in again.</dd>
+              </div>
+            `,
+            stateClass: 'is-error',
+          });
+          return;
+        }
+
+        const currentUser = result.data;
+        const displayName = getUserDisplayName(currentUser);
+
+        updateDashboardState({
+          title: 'Your session is active.',
+          description: 'The protected current user request succeeded and your dashboard is now using live user data from Xano.',
+          welcomeTitle: `Welcome back, ${displayName}!`,
+          welcomeText: 'This dashboard is no longer placeholder content. It is showing the current logged-in user from the /auth/me endpoint.',
+          userFields: renderUserFields(currentUser),
+          stateClass: 'is-success',
+        });
+      } catch (error) {
+        updateDashboardState({
+          title: 'The dashboard request could not finish.',
+          description: 'We could not reach the current user service. Please check your connection and try again.',
+          welcomeTitle: 'We hit a network problem',
+          welcomeText: 'Your token is still saved locally, but the dashboard could not fetch your current user profile just now.',
+          userFields: `
+            <div>
+              <dt>Status</dt>
+              <dd>Network error</dd>
+            </div>
+            <div>
+              <dt>Request</dt>
+              <dd>GET /auth/me could not be completed.</dd>
+            </div>
+          `,
+          stateClass: 'is-error',
+        });
+      }
+    })();
+  }
 }
