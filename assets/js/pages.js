@@ -113,6 +113,17 @@ const localPath = (href) => {
   return href.startsWith('../') ? href : href;
 };
 
+// Convert any value into safe text before placing it into the page.
+// This keeps beginner-friendly template strings safe when they show live API data.
+const escapeHtml = (value) => {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('\"', '&quot;')
+    .replaceAll("'", '&#39;');
+};
+
 // Read the most helpful display name that exists in the current user object.
 // Xano responses can vary, so this helper checks a few common field names.
 const getUserDisplayName = (userData) => {
@@ -121,6 +132,18 @@ const getUserDisplayName = (userData) => {
   }
 
   return userData.name || userData.full_name || userData.fullName || userData.first_name || userData.firstName || userData.email || 'there';
+};
+
+// Read the current user's role from a few common field names so the dashboard
+// can work with small backend naming differences.
+const getUserRole = (userData) => {
+  if (!userData || typeof userData !== 'object') {
+    return '';
+  }
+
+  const possibleRoleValue = userData.role || userData.user_role || userData.userRole || userData.account_type || userData.accountType || '';
+
+  return String(possibleRoleValue).trim().toLowerCase();
 };
 
 const renderStandardPage = () => `
@@ -355,6 +378,24 @@ const renderDashboardShell = () => `
         </div>
       </dl>
     </article>
+  </section>
+
+  <section class="dashboard-role-section" aria-labelledby="dashboard-role-title">
+    <div class="dashboard-role-header">
+      <div>
+        <span class="panel-label">Role-Based View</span>
+        <h2 id="dashboard-role-title">Loading dashboard sections</h2>
+      </div>
+      <p class="dashboard-role-copy">This area updates after <code>getCurrentUser()</code> returns the current logged-in user and role.</p>
+    </div>
+
+    <div class="dashboard-role-grid" id="dashboard-role-grid" aria-live="polite">
+      <article class="feature-card dashboard-role-card is-loading">
+        <span class="panel-label">Preparing View</span>
+        <h3>Checking your role</h3>
+        <p>We will show customer or tailor dashboard content as soon as the protected user request finishes.</p>
+      </article>
+    </div>
   </section>
 
   <section class="feature-grid" aria-label="Dashboard highlights">
@@ -595,6 +636,8 @@ if (pageKey === 'dashboard') {
   const dashboardStatusPanel = document.querySelector('#dashboard-status-panel');
   const dashboardWelcomeCard = document.querySelector('#dashboard-welcome-card');
   const dashboardUserCard = document.querySelector('#dashboard-user-card');
+  const dashboardRoleTitle = document.querySelector('#dashboard-role-title');
+  const dashboardRoleGrid = document.querySelector('#dashboard-role-grid');
   const apiHelpers = window.TailorMarketplaceApi;
   const authToken = apiHelpers.getAuthToken();
   const currentBasePath = document.body.dataset.basePath || '..';
@@ -622,11 +665,120 @@ if (pageKey === 'dashboard') {
       .map(
         ([key, value]) => `
           <div>
-            <dt>${key}</dt>
-            <dd>${String(value)}</dd>
+            <dt>${escapeHtml(key)}</dt>
+            <dd>${escapeHtml(value)}</dd>
           </div>
         `,
       )
+      .join('');
+  };
+
+  // Keep the role-based dashboard content in plain data so it is easy for a
+  // beginner to adjust the section titles and text later.
+  const getDashboardSectionsForRole = (role) => {
+    if (role === 'customer') {
+      return {
+        title: 'Customer dashboard sections',
+        cards: [
+          {
+            label: 'Bookings',
+            title: 'Track upcoming fittings',
+            text: 'Review booking progress, confirm appointment times, and keep an eye on recent tailoring updates.',
+            links: [
+              { label: 'View bookings', href: 'bookings.html' },
+              { label: 'Browse tailors', href: 'tailors.html' },
+            ],
+          },
+          {
+            label: 'Reviews',
+            title: 'Share feedback after each order',
+            text: 'Leave reviews for completed work, revisit past ratings, and build a simple history of trusted tailors.',
+            links: [{ label: 'Read reviews', href: 'reviews.html' }],
+          },
+          {
+            label: 'Profile Actions',
+            title: 'Keep your account details up to date',
+            text: 'Use this space for profile updates, saved preferences, and future customer account actions as the app grows.',
+            links: [{ label: 'Return home', href: '../index.html' }],
+          },
+        ],
+      };
+    }
+
+    if (role === 'tailor') {
+      return {
+        title: 'Tailor dashboard sections',
+        cards: [
+          {
+            label: 'Tailor Profile',
+            title: 'Present your services clearly',
+            text: 'Review how your business information appears and prepare this area for future profile editing from the shared API layer.',
+            links: [{ label: 'Browse directory', href: 'tailors.html' }],
+          },
+          {
+            label: 'Bookings & Orders',
+            title: 'Manage active work in one place',
+            text: 'Check incoming bookings, monitor order status, and stay ready for fittings, pickups, or delivery milestones.',
+            links: [{ label: 'Open bookings', href: 'bookings.html' }],
+          },
+          {
+            label: 'Reviews Received',
+            title: 'Follow customer feedback',
+            text: 'Use this area to watch new reviews, celebrate positive feedback, and spot service improvements quickly.',
+            links: [{ label: 'View reviews', href: 'reviews.html' }],
+          },
+          {
+            label: 'Management Actions',
+            title: 'Keep your shop organized',
+            text: 'This section is ready for future actions like updating availability, managing services, or preparing order notes.',
+            links: [{ label: 'Go to dashboard top', href: 'dashboard.html' }],
+          },
+        ],
+      };
+    }
+
+    return {
+      title: 'Dashboard sections are limited right now',
+      cards: [
+        {
+          label: 'Role Needed',
+          title: 'We could not confirm your account role',
+          text: 'Your session is active, but the current user response did not include a supported role like customer or tailor.',
+          links: [{ label: 'Back to home', href: '../index.html' }],
+        },
+        {
+          label: 'Safe Fallback',
+          title: 'Basic account access is still available',
+          text: 'The protected dashboard stayed in place and showed a safe fallback view so the page remains stable for unknown role values.',
+          links: [{ label: 'Read reviews', href: 'reviews.html' }],
+        },
+      ],
+    };
+  };
+
+  const renderRoleCards = (role) => {
+    const roleContent = getDashboardSectionsForRole(role);
+
+    dashboardRoleTitle.textContent = roleContent.title;
+    dashboardRoleGrid.innerHTML = roleContent.cards
+      .map((card) => {
+        const linksMarkup = (card.links || [])
+          .map(
+            (link) => `
+              <a class="button button-secondary dashboard-role-link" href="${localPath(link.href)}">${escapeHtml(link.label)}</a>
+            `,
+          )
+          .join('');
+
+        return `
+          <article class="feature-card dashboard-role-card">
+            <span class="panel-label">${escapeHtml(card.label)}</span>
+            <h3>${escapeHtml(card.title)}</h3>
+            <p>${escapeHtml(card.text)}</p>
+            <div class="dashboard-role-actions">${linksMarkup}</div>
+          </article>
+        `;
+      })
       .join('');
   };
 
@@ -634,15 +786,15 @@ if (pageKey === 'dashboard') {
     dashboardStatusPanel.className = `hero-panel dashboard-status-panel ${stateClass}`.trim();
     dashboardStatusPanel.innerHTML = `
       <p class="panel-label">Dashboard Status</p>
-      <h2>${title}</h2>
-      <p>${description}</p>
+      <h2>${escapeHtml(title)}</h2>
+      <p>${escapeHtml(description)}</p>
     `;
 
     dashboardWelcomeCard.className = `feature-card dashboard-welcome-card ${stateClass}`.trim();
     dashboardWelcomeCard.innerHTML = `
       <span class="panel-label">Welcome</span>
-      <h2>${welcomeTitle}</h2>
-      <p>${welcomeText}</p>
+      <h2>${escapeHtml(welcomeTitle)}</h2>
+      <p>${escapeHtml(welcomeText)}</p>
     `;
 
     dashboardUserCard.className = `feature-card dashboard-user-card ${stateClass}`.trim();
@@ -677,6 +829,7 @@ if (pageKey === 'dashboard') {
         `,
         stateClass: 'is-loading',
       });
+      renderRoleCards('');
 
       try {
         const result = await apiHelpers.getCurrentUser();
@@ -701,6 +854,15 @@ if (pageKey === 'dashboard') {
               stateClass: 'is-error',
             });
 
+            dashboardRoleTitle.textContent = 'Session expired';
+            dashboardRoleGrid.innerHTML = `
+              <article class="feature-card dashboard-role-card">
+                <span class="panel-label">Login Required</span>
+                <h3>Please sign in again</h3>
+                <p>Your saved token is being cleared before the dashboard redirects to the shared login page.</p>
+              </article>
+            `;
+
             window.setTimeout(() => {
               clearSessionAndGoToLogin();
             }, 800);
@@ -724,20 +886,28 @@ if (pageKey === 'dashboard') {
             `,
             stateClass: 'is-error',
           });
+          renderRoleCards('');
           return;
         }
 
         const currentUser = result.data;
         const displayName = getUserDisplayName(currentUser);
+        const userRole = getUserRole(currentUser);
+        const roleLabel = userRole ? userRole.charAt(0).toUpperCase() + userRole.slice(1) : 'Unknown';
 
         updateDashboardState({
           title: 'Your session is active.',
-          description: 'The protected current user request succeeded and your dashboard is now using live user data from Xano.',
+          description: `The protected current user request succeeded and the dashboard detected a ${roleLabel.toLowerCase()} role.`,
           welcomeTitle: `Welcome back, ${displayName}!`,
-          welcomeText: 'This dashboard is no longer placeholder content. It is showing the current logged-in user from the /auth/me endpoint.',
-          userFields: renderUserFields(currentUser),
+          welcomeText: 'This dashboard is now showing role-based sections using the current logged-in user response from /auth/me.',
+          userFields: `${renderUserFields(currentUser)}
+            <div>
+              <dt>Detected role</dt>
+              <dd>${escapeHtml(roleLabel)}</dd>
+            </div>`,
           stateClass: 'is-success',
         });
+        renderRoleCards(userRole);
       } catch (error) {
         updateDashboardState({
           title: 'The dashboard request could not finish.',
@@ -756,6 +926,7 @@ if (pageKey === 'dashboard') {
           `,
           stateClass: 'is-error',
         });
+        renderRoleCards('');
       }
     })();
   }
