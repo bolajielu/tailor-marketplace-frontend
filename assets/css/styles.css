@@ -348,6 +348,70 @@ button {
 }
 
 
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.25rem;
+  margin-top: 1.5rem;
+}
+
+.dashboard-status-panel h2,
+.dashboard-welcome-card h2 {
+  margin: 1rem 0 0.75rem;
+  font-size: 1.6rem;
+  letter-spacing: -0.03em;
+}
+
+.dashboard-status-panel p,
+.dashboard-welcome-card p,
+.dashboard-user-list dd,
+.dashboard-user-list dt {
+  line-height: 1.6;
+}
+
+.dashboard-user-list {
+  display: grid;
+  gap: 1rem;
+  margin: 1rem 0 0;
+}
+
+.dashboard-user-list div {
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-alt);
+}
+
+.dashboard-user-list dt {
+  font-weight: 700;
+  margin-bottom: 0.3rem;
+}
+
+.dashboard-user-list dd {
+  margin: 0;
+  color: var(--muted);
+  word-break: break-word;
+}
+
+.dashboard-status-panel.is-loading,
+.dashboard-welcome-card.is-loading,
+.dashboard-user-card.is-loading {
+  border-color: #bfdbfe;
+}
+
+.dashboard-status-panel.is-success,
+.dashboard-welcome-card.is-success,
+.dashboard-user-card.is-success {
+  border-color: #86efac;
+}
+
+.dashboard-status-panel.is-error,
+.dashboard-welcome-card.is-error,
+.dashboard-user-card.is-error {
+  border-color: #fca5a5;
+}
+
 .feature-card h2 {
   margin-top: 0;
   margin-bottom: 0.75rem;
@@ -380,6 +444,7 @@ button {
 
   .hero-card,
   .feature-grid,
+  .dashboard-grid,
   .login-layout,
   .site-footer {
     grid-template-columns: 1fr;

@@ -24,8 +24,42 @@ const API_ENDPOINTS = {
   reviews: '/reviews',
 };
 
+// Keep the auth token storage key in one place so login and authenticated requests stay aligned.
+const AUTH_TOKEN_KEY = 'tailorMarketplaceToken';
+
 // Build the full API URL from the shared base URL and one endpoint path.
 const buildApiUrl = (endpointPath) => `${XANO_BASE_URL}${endpointPath}`;
+
+/*
+  Read the saved auth token from localStorage.
+
+  Why this helper matters:
+  - Pages should not repeat the token key string in multiple places.
+  - Authenticated requests should use one shared way to read the token.
+  - Returning an empty string when no token exists keeps later checks simple.
+*/
+const getAuthToken = () => localStorage.getItem(AUTH_TOKEN_KEY) || '';
+
+/*
+  Build the Authorization header for authenticated requests.
+
+  Returned shape:
+  - {} when no token exists
+  - { Authorization: 'Bearer <token>' } when a token exists
+
+  This keeps the Bearer token format centralized in one beginner-friendly helper.
+*/
+const getAuthHeaders = () => {
+  const authToken = getAuthToken();
+
+  if (!authToken) {
+    return {};
+  }
+
+  return {
+    Authorization: `Bearer ${authToken}`,
+  };
+};
 
 /*
   Safely read JSON from a fetch() response.
@@ -131,12 +165,29 @@ const postRequest = (endpointPath, data = {}, options = {}) => {
   });
 };
 
+/*
+  Shared helper for authenticated requests.
+
+  Why this helper matters:
+  - Pages can ask for an authenticated request without manually building headers.
+  - The Bearer token format stays in one place.
+  - The dashboard page can stay focused on rendering instead of fetch setup.
+*/
+const authenticatedRequest = (endpointPath, options = {}) => {
+  return apiRequest(endpointPath, {
+    ...options,
+    headers: {
+      ...getAuthHeaders(),
+      ...(options.headers || {}),
+    },
+  });
+};
+
 // Authentication helpers keep login and signup endpoint configuration centralized.
 // The login helper sends { email, password } to Xano and returns one shared result shape.
-// Future authenticated requests can read the saved token from localStorage and send it in an Authorization header.
 const loginUser = (loginData) => postRequest(API_ENDPOINTS.login, loginData);
 const signupUser = (signupData) => postRequest(API_ENDPOINTS.signup, signupData);
-const getCurrentUser = () => getRequest(API_ENDPOINTS.currentUser);
+const getCurrentUser = () => authenticatedRequest(API_ENDPOINTS.currentUser, { method: 'GET' });
 
 // Marketplace data helpers.
 const getTailors = () => getRequest(API_ENDPOINTS.tailors);
@@ -147,12 +198,16 @@ const getReviews = () => getRequest(API_ENDPOINTS.reviews);
 window.TailorMarketplaceApi = {
   XANO_BASE_URL,
   API_ENDPOINTS,
+  AUTH_TOKEN_KEY,
   buildApiUrl,
+  getAuthToken,
+  getAuthHeaders,
   safeParseJson,
   createApiResult,
   apiRequest,
   getRequest,
   postRequest,
+  authenticatedRequest,
   loginUser,
   signupUser,
   getCurrentUser,
