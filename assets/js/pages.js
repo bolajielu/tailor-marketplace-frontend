@@ -13,16 +13,21 @@ const pageContent = {
     ],
   },
   login: {
-    heroEyebrow: 'Account Access',
-    heroTitle: 'Sign in quickly and get back to managing appointments.',
+    heroEyebrow: 'Welcome Back',
+    heroTitle: 'Sign in to manage bookings, messages, and your tailoring schedule.',
     heroText:
-      'This page shares the same shell as the rest of the site, making authentication feel like part of one cohesive product.',
-    primaryAction: { label: 'Go to Dashboard', href: 'dashboard.html' },
-    secondaryAction: { label: 'Need an account?', href: 'signup.html' },
+      'Use this clean login form to continue into the Tailor Marketplace experience while keeping the shared header, navigation, and footer in place.',
+    formTitle: 'Login to your account',
+    formText: 'Enter your details below to continue. This is a UI-only form for now and can be connected to Xano later.',
+    forgotPasswordText: 'Forgot password?',
+    forgotPasswordHref: '#',
+    validationDefault: 'Use the form to enter your email and password.',
+    primaryAction: { label: 'Create an Account', href: 'signup.html' },
+    secondaryAction: { label: 'Browse Tailors', href: 'tailors.html' },
     highlights: [
-      { title: 'Simple workflows', text: 'Keep customer and tailor logins focused on essential actions.' },
-      { title: 'Consistent experience', text: 'Shared navigation reduces friction between public and private sections.' },
-      { title: 'Ready for forms', text: 'The content area can be replaced with a real login form later.' },
+      { title: 'Simple sign-in flow', text: 'Email and password inputs keep the page focused on the essentials.' },
+      { title: 'Helpful feedback area', text: 'A built-in validation message space makes future form logic easier to follow.' },
+      { title: 'Ready for backend setup', text: 'The submit handler is clearly commented so Xano integration can be added later.' },
     ],
   },
   signup: {
@@ -102,7 +107,7 @@ const localPath = (href) => {
   return href.startsWith('../') ? href : href;
 };
 
-contentRoot.innerHTML = `
+const renderStandardPage = () => `
   <section class="hero-card">
     <div class="hero-copy">
       <span class="eyebrow">${page.heroEyebrow}</span>
@@ -135,3 +140,97 @@ contentRoot.innerHTML = `
       .join('')}
   </section>
 `;
+
+const renderLoginPage = () => `
+  <section class="login-layout">
+    <article class="login-intro hero-copy">
+      <span class="eyebrow">${page.heroEyebrow}</span>
+      <h1>${page.heroTitle}</h1>
+      <p>${page.heroText}</p>
+      <div class="hero-actions">
+        <a class="button button-primary" href="${localPath(page.primaryAction.href)}">${page.primaryAction.label}</a>
+        <a class="button button-secondary" href="${localPath(page.secondaryAction.href)}">${page.secondaryAction.label}</a>
+      </div>
+    </article>
+
+    <section class="login-card" aria-labelledby="login-form-title">
+      <div class="login-card-header">
+        <span class="panel-label">Secure Access</span>
+        <h2 id="login-form-title">${page.formTitle}</h2>
+        <p>${page.formText}</p>
+      </div>
+
+      <form class="login-form" id="login-form" novalidate>
+        <div class="form-field">
+          <label for="email">Email address</label>
+          <input id="email" name="email" type="email" autocomplete="email" placeholder="you@example.com" required />
+        </div>
+
+        <div class="form-field">
+          <div class="form-label-row">
+            <label for="password">Password</label>
+            <a class="text-link" href="${page.forgotPasswordHref}">${page.forgotPasswordText}</a>
+          </div>
+          <input
+            id="password"
+            name="password"
+            type="password"
+            autocomplete="current-password"
+            placeholder="Enter your password"
+            required
+          />
+        </div>
+
+        <p class="validation-message" id="login-message" aria-live="polite">${page.validationDefault}</p>
+
+        <button class="button button-primary login-submit" type="submit">Sign In</button>
+      </form>
+    </section>
+  </section>
+
+  <section class="feature-grid" aria-label="Login page highlights">
+    ${page.highlights
+      .map(
+        (item) => `
+          <article class="feature-card">
+            <h2>${item.title}</h2>
+            <p>${item.text}</p>
+          </article>
+        `,
+      )
+      .join('')}
+  </section>
+`;
+
+contentRoot.innerHTML = pageKey === 'login' ? renderLoginPage() : renderStandardPage();
+
+if (pageKey === 'login') {
+  const loginForm = document.querySelector('#login-form');
+  const loginMessage = document.querySelector('#login-message');
+
+  // This simple form handler provides beginner-friendly front-end validation.
+  // It can later be replaced or extended with a fetch() call to a Xano login endpoint.
+  loginForm.addEventListener('submit', (event) => {
+    event.preventDefault();
+
+    const emailInput = document.querySelector('#email');
+    const passwordInput = document.querySelector('#password');
+    const emailValue = emailInput.value.trim();
+    const passwordValue = passwordInput.value.trim();
+
+    if (!emailValue || !passwordValue) {
+      loginMessage.textContent = 'Please enter both your email address and password.';
+      loginMessage.className = 'validation-message is-error';
+      return;
+    }
+
+    if (!emailInput.checkValidity()) {
+      loginMessage.textContent = 'Please enter a valid email address before continuing.';
+      loginMessage.className = 'validation-message is-error';
+      return;
+    }
+
+    loginMessage.textContent = 'Login form submitted successfully. Connect this action to your Xano API when ready.';
+    loginMessage.className = 'validation-message is-success';
+  });
+}
