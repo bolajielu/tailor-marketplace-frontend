@@ -2,26 +2,38 @@
   Centralized API helpers for the Tailor Marketplace frontend.
 
   Why this file exists:
-  - It keeps the future Xano base URL in one place.
-  - It keeps endpoint paths in one place.
-  - It gives the project simple fetch() helper functions that other pages can reuse.
+  - It keeps every Xano API base URL in one place.
+  - It keeps endpoint paths grouped by purpose so pages stay simple.
+  - It gives the project beginner-friendly fetch() helper functions that other pages can reuse.
 
   This project uses plain browser JavaScript instead of a framework, so this file
   exposes one shared object on window: window.TailorMarketplaceApi.
 */
 
-// Real Xano base URL for the shared Tailor Marketplace backend.
-// Keeping this value here means pages only call helper functions instead of hardcoding URLs.
-const XANO_BASE_URL = 'https://x8ki-letl-twmt.n7.xano.io/api:7K6R8GYB';
+// Keep all Xano base URLs grouped in one place so page files never need to hardcode them.
+const API_BASE_URLS = {
+  auth: 'https://x8ki-letl-twmt.n7.xano.io/api:7K6R8GYB',
+  app: 'https://x8ki-letl-twmt.n7.xano.io/api:lWSPi4ll',
+  users: 'https://x8ki-letl-twmt.n7.xano.io/api:Jp0dBE1E',
+};
 
-// Keep every API path in one central place so URLs are not repeated across files.
+// Keep endpoint paths grouped by API area so it is easy to see which base URL they belong to.
 const API_ENDPOINTS = {
-  login: '/auth/login',
-  signup: '/auth/signup',
-  currentUser: '/auth/me',
-  tailors: '/tailors',
-  bookings: '/bookings',
-  reviews: '/reviews',
+  auth: {
+    login: '/auth/login',
+    signup: '/auth/signup',
+    currentUser: '/auth/me',
+  },
+  app: {
+    tailors: '/tailor',
+    bookings: '/bookings',
+    reviews: '/reviews',
+  },
+  users: {
+    bookings: '/get_bookings',
+    reviews: '/get_reviews',
+    profile: '/update_user_profile',
+  },
 };
 
 // Keep the auth token storage key in one place so login and authenticated requests stay aligned.
@@ -31,8 +43,16 @@ const AUTH_TOKEN_KEY = 'tailorMarketplaceToken';
 // redirects always send the user to the same screen.
 const LOGIN_PAGE_PATH = 'login.html';
 
-// Build the full API URL from the shared base URL and one endpoint path.
-const buildApiUrl = (endpointPath) => `${XANO_BASE_URL}${endpointPath}`;
+// Build the full API URL from one API group and one endpoint path.
+const buildApiUrl = (apiGroup, endpointPath) => {
+  const baseUrl = API_BASE_URLS[apiGroup];
+
+  if (!baseUrl) {
+    throw new Error(`Unknown API group: ${apiGroup}`);
+  }
+
+  return `${baseUrl}${endpointPath}`;
+};
 
 /*
   Read the saved auth token from localStorage.
@@ -155,39 +175,62 @@ const createApiResult = async (response) => {
 
   Use this function whenever a page needs to talk to Xano.
   It accepts:
+  - apiGroup: one of the keys from API_BASE_URLS such as 'auth', 'app', or 'users'
   - endpointPath: one of the values from API_ENDPOINTS
   - options: regular fetch() options such as method, headers, and body
 
   It returns the beginner-friendly result object created by createApiResult().
 */
-const apiRequest = async (endpointPath, options = {}) => {
-  const requestOptions = {
-    method: options.method || 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options.headers || {}),
-    },
-    ...options,
+const apiRequest = async (apiGroup, endpointPath, options = {}) => {
+  const requestHeaders = {
+    ...(options.headers || {}),
   };
 
-  const response = await fetch(buildApiUrl(endpointPath), requestOptions);
+  if (!requestHeaders['Content-Type'] && !(options.body instanceof FormData)) {
+    requestHeaders['Content-Type'] = 'application/json';
+  }
+
+  const requestOptions = {
+    method: options.method || 'GET',
+    ...options,
+    headers: requestHeaders,
+  };
+
+  const response = await fetch(buildApiUrl(apiGroup, endpointPath), requestOptions);
   return createApiResult(response);
 };
 
 // Simple helper for GET requests.
-const getRequest = (endpointPath, options = {}) => {
-  return apiRequest(endpointPath, {
+const getRequest = (apiGroup, endpointPath, options = {}) => {
+  return apiRequest(apiGroup, endpointPath, {
     ...options,
     method: 'GET',
   });
 };
 
 // Simple helper for POST requests that send JSON data.
-const postRequest = (endpointPath, data = {}, options = {}) => {
-  return apiRequest(endpointPath, {
+const postRequest = (apiGroup, endpointPath, data = {}, options = {}) => {
+  return apiRequest(apiGroup, endpointPath, {
     ...options,
     method: 'POST',
     body: JSON.stringify(data),
+  });
+};
+
+// Simple helper for PATCH requests that send JSON data.
+const patchRequest = (apiGroup, endpointPath, data = {}, options = {}) => {
+  return apiRequest(apiGroup, endpointPath, {
+    ...options,
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+};
+
+// Simple helper for DELETE requests.
+const deleteRequest = (apiGroup, endpointPath, options = {}) => {
+  return apiRequest(apiGroup, endpointPath, {
+    ...options,
+    method: 'DELETE',
   });
 };
 
@@ -199,8 +242,8 @@ const postRequest = (endpointPath, data = {}, options = {}) => {
   - The Bearer token format stays in one place.
   - The dashboard page can stay focused on rendering instead of fetch setup.
 */
-const authenticatedRequest = (endpointPath, options = {}) => {
-  return apiRequest(endpointPath, {
+const authenticatedRequest = (apiGroup, endpointPath, options = {}) => {
+  return apiRequest(apiGroup, endpointPath, {
     ...options,
     headers: {
       ...getAuthHeaders(),
@@ -209,20 +252,41 @@ const authenticatedRequest = (endpointPath, options = {}) => {
   });
 };
 
-// Authentication helpers keep login and signup endpoint configuration centralized.
-// The login helper sends { email, password } to Xano and returns one shared result shape.
-const loginUser = (loginData) => postRequest(API_ENDPOINTS.login, loginData);
-const signupUser = (signupData) => postRequest(API_ENDPOINTS.signup, signupData);
-const getCurrentUser = () => authenticatedRequest(API_ENDPOINTS.currentUser, { method: 'GET' });
+// Authentication helpers use the auth API base automatically.
+const loginUser = (loginData) => postRequest('auth', API_ENDPOINTS.auth.login, loginData);
+const signupUser = (signupData) => postRequest('auth', API_ENDPOINTS.auth.signup, signupData);
+const getCurrentUser = () => authenticatedRequest('auth', API_ENDPOINTS.auth.currentUser, { method: 'GET' });
 
-// Marketplace data helpers.
-const getTailors = () => getRequest(API_ENDPOINTS.tailors);
-const getBookings = () => getRequest(API_ENDPOINTS.bookings);
-const getReviews = () => getRequest(API_ENDPOINTS.reviews);
+// Tailor and marketplace helpers use the app API base automatically.
+const getTailors = () => getRequest('app', API_ENDPOINTS.app.tailors);
+const getTailorById = (tailorId) => getRequest('app', `${API_ENDPOINTS.app.tailors}/${tailorId}`);
+const createTailor = (tailorData) => authenticatedRequest('app', API_ENDPOINTS.app.tailors, {
+  method: 'POST',
+  body: JSON.stringify(tailorData),
+});
+const updateTailor = (tailorId, tailorData) => authenticatedRequest('app', `${API_ENDPOINTS.app.tailors}/${tailorId}`, {
+  method: 'PATCH',
+  body: JSON.stringify(tailorData),
+});
+const deleteTailor = (tailorId) => authenticatedRequest('app', `${API_ENDPOINTS.app.tailors}/${tailorId}`, {
+  method: 'DELETE',
+});
+
+// Customer dashboard helpers use the users API base automatically.
+const getUserBookings = () => authenticatedRequest('users', API_ENDPOINTS.users.bookings, { method: 'GET' });
+const getUserReviews = () => authenticatedRequest('users', API_ENDPOINTS.users.reviews, { method: 'GET' });
+const updateUserProfile = (profileData) => authenticatedRequest('users', API_ENDPOINTS.users.profile, {
+  method: 'PATCH',
+  body: JSON.stringify(profileData),
+});
+
+// Backward-compatible aliases keep existing page behavior intact while the API grows.
+const getBookings = () => getUserBookings();
+const getReviews = () => getUserReviews();
 
 // Expose one beginner-friendly global object that other scripts can use later.
 window.TailorMarketplaceApi = {
-  XANO_BASE_URL,
+  API_BASE_URLS,
   API_ENDPOINTS,
   AUTH_TOKEN_KEY,
   LOGIN_PAGE_PATH,
@@ -237,11 +301,20 @@ window.TailorMarketplaceApi = {
   apiRequest,
   getRequest,
   postRequest,
+  patchRequest,
+  deleteRequest,
   authenticatedRequest,
   loginUser,
   signupUser,
   getCurrentUser,
   getTailors,
+  getTailorById,
+  createTailor,
+  updateTailor,
+  deleteTailor,
+  getUserBookings,
+  getUserReviews,
+  updateUserProfile,
   getBookings,
   getReviews,
 };
