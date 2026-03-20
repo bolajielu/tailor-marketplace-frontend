@@ -376,10 +376,18 @@ if (pageKey === 'login') {
 if (pageKey === 'signup') {
   const signupForm = document.querySelector('#signup-form');
   const signupMessage = document.querySelector('#signup-message');
+  const signupSubmitButton = signupForm.querySelector('button[type="submit"]');
 
-  // This simple signup handler keeps the validation steps easy to read.
-  // It can later be extended with a fetch() call to a Xano signup endpoint.
-  signupForm.addEventListener('submit', (event) => {
+  // Keep signup message updates in one place so loading, success, and error
+  // states all use the same validation message area.
+  const updateSignupMessage = (message, stateClass) => {
+    signupMessage.textContent = message;
+    signupMessage.className = `validation-message ${stateClass}`.trim();
+  };
+
+  // This signup handler uses the shared API helper so the page does not need
+  // to know any endpoint URLs. The API details stay centralized in api.js.
+  signupForm.addEventListener('submit', async (event) => {
     event.preventDefault();
 
     const nameInput = document.querySelector('#signup-name');
@@ -393,31 +401,61 @@ if (pageKey === 'signup') {
     const confirmPasswordValue = confirmPasswordInput.value.trim();
 
     if (!nameValue || !emailValue || !passwordValue || !confirmPasswordValue) {
-      signupMessage.textContent = 'Please complete every field before creating your account.';
-      signupMessage.className = 'validation-message is-error';
+      updateSignupMessage('Please complete every field before creating your account.', 'is-error');
       return;
     }
 
     if (!emailInput.checkValidity()) {
-      signupMessage.textContent = 'Please enter a valid email address before submitting the form.';
-      signupMessage.className = 'validation-message is-error';
+      updateSignupMessage('Please enter a valid email address before submitting the form.', 'is-error');
       return;
     }
 
     if (passwordValue.length < 8) {
-      signupMessage.textContent = 'Please choose a password that is at least 8 characters long.';
-      signupMessage.className = 'validation-message is-error';
+      updateSignupMessage('Please choose a password that is at least 8 characters long.', 'is-error');
       return;
     }
 
     if (passwordValue !== confirmPasswordValue) {
-      signupMessage.textContent = 'Your password and confirm password fields must match.';
-      signupMessage.className = 'validation-message is-error';
+      updateSignupMessage('Your password and confirm password fields must match.', 'is-error');
       return;
     }
 
-    signupMessage.textContent =
-      'Signup form submitted successfully. Connect this action to your Xano signup API when ready.';
-    signupMessage.className = 'validation-message is-success';
+    updateSignupMessage('Creating your account... Please wait.', '');
+    signupSubmitButton.disabled = true;
+
+    try {
+      const response = await window.TailorMarketplaceApi.signupUser({
+        fullName: nameValue,
+        email: emailValue,
+        password: passwordValue,
+      });
+
+      // Parse the response body as JSON so this page can read success details
+      // or backend error messages returned from the centralized API helper.
+      const responseData = await response.json();
+
+      if (!response.ok) {
+        const errorMessage = responseData.message || responseData.error || 'Signup failed. Please try again.';
+        updateSignupMessage(errorMessage, 'is-error');
+        return;
+      }
+
+      // Store the real Xano auth token here after a successful signup.
+      // Example: localStorage.setItem('tailorMarketplaceToken', responseData.authToken);
+      // Replace `responseData.authToken` with the real token field returned by your Xano API.
+
+      // Store real user profile data here if you want to reuse it across pages.
+      // Example: localStorage.setItem('tailorMarketplaceUser', JSON.stringify(responseData.user));
+      // Replace `responseData.user` with the real user data shape returned by your Xano API.
+
+      updateSignupMessage('Signup successful. Your account response was received.', 'is-success');
+
+      // Do not redirect yet. Wait until your real signup response is successful
+      // and you know which page the user should visit next.
+    } catch (error) {
+      updateSignupMessage('We could not reach the signup service. Please try again in a moment.', 'is-error');
+    } finally {
+      signupSubmitButton.disabled = false;
+    }
   });
 }
