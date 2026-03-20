@@ -310,10 +310,18 @@ contentRoot.innerHTML =
 if (pageKey === 'login') {
   const loginForm = document.querySelector('#login-form');
   const loginMessage = document.querySelector('#login-message');
+  const loginSubmitButton = loginForm.querySelector('button[type="submit"]');
 
-  // This simple form handler provides beginner-friendly front-end validation.
-  // It can later be replaced or extended with a fetch() call to a Xano login endpoint.
-  loginForm.addEventListener('submit', (event) => {
+  // This helper keeps the message updates simple and easy to reuse.
+  const updateLoginMessage = (message, stateClass) => {
+    loginMessage.textContent = message;
+    loginMessage.className = `validation-message ${stateClass}`.trim();
+  };
+
+  // This submit handler uses the shared API helper so the login page does not
+  // need to know the Xano endpoint URL. The api.js file stays responsible for
+  // endpoint paths and fetch() setup.
+  loginForm.addEventListener('submit', async (event) => {
     event.preventDefault();
 
     const emailInput = document.querySelector('#email');
@@ -322,19 +330,46 @@ if (pageKey === 'login') {
     const passwordValue = passwordInput.value.trim();
 
     if (!emailValue || !passwordValue) {
-      loginMessage.textContent = 'Please enter both your email address and password.';
-      loginMessage.className = 'validation-message is-error';
+      updateLoginMessage('Please enter both your email address and password.', 'is-error');
       return;
     }
 
     if (!emailInput.checkValidity()) {
-      loginMessage.textContent = 'Please enter a valid email address before continuing.';
-      loginMessage.className = 'validation-message is-error';
+      updateLoginMessage('Please enter a valid email address before continuing.', 'is-error');
       return;
     }
 
-    loginMessage.textContent = 'Login form submitted successfully. Connect this action to your Xano API when ready.';
-    loginMessage.className = 'validation-message is-success';
+    updateLoginMessage('Signing you in... Please wait.', '');
+    loginSubmitButton.disabled = true;
+
+    try {
+      const response = await window.TailorMarketplaceApi.loginUser({
+        email: emailValue,
+        password: passwordValue,
+      });
+
+      // Parse the API response as JSON so the page can show clear feedback.
+      const responseData = await response.json();
+
+      if (!response.ok) {
+        const errorMessage = responseData.message || responseData.error || 'Login failed. Please try again.';
+        updateLoginMessage(errorMessage, 'is-error');
+        return;
+      }
+
+      // Store the real Xano auth token after a successful login.
+      // Example: localStorage.setItem('tailorMarketplaceToken', responseData.authToken);
+      // Replace `responseData.authToken` with the actual token field returned by your Xano login API.
+
+      updateLoginMessage('Login successful. Your account response was received.', 'is-success');
+
+      // Do not redirect until you are ready to connect the successful response
+      // to the next page in your real application flow.
+    } catch (error) {
+      updateLoginMessage('We could not reach the login service. Please try again in a moment.', 'is-error');
+    } finally {
+      loginSubmitButton.disabled = false;
+    }
   });
 }
 
