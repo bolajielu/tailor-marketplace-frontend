@@ -638,6 +638,7 @@ if (pageKey === 'dashboard') {
   const dashboardUserCard = document.querySelector('#dashboard-user-card');
   const dashboardRoleTitle = document.querySelector('#dashboard-role-title');
   const dashboardRoleGrid = document.querySelector('#dashboard-role-grid');
+  const dashboardRoleCopy = document.querySelector('.dashboard-role-copy');
   const apiHelpers = window.TailorMarketplaceApi;
   const authToken = apiHelpers.getAuthToken();
   const currentBasePath = document.body.dataset.basePath || '..';
@@ -671,6 +672,228 @@ if (pageKey === 'dashboard') {
         `,
       )
       .join('');
+  };
+
+  // Turn different API response shapes into one simple array.
+  // This keeps the customer dashboard flexible if Xano returns either:
+  // - a plain array
+  // - an object with an items/data/results array inside it
+  const getCollectionItems = (apiData) => {
+    if (Array.isArray(apiData)) {
+      return apiData;
+    }
+
+    if (!apiData || typeof apiData !== 'object') {
+      return [];
+    }
+
+    const possibleArrays = [apiData.items, apiData.data, apiData.results, apiData.bookings, apiData.reviews];
+    const matchingArray = possibleArrays.find((value) => Array.isArray(value));
+
+    return matchingArray || [];
+  };
+
+  // Read a useful label for status-like values without assuming one exact field
+  // name from the API response.
+  const getFirstMatchingValue = (record, fieldNames) => {
+    if (!record || typeof record !== 'object') {
+      return '';
+    }
+
+    const matchingField = fieldNames.find((fieldName) => {
+      const value = record[fieldName];
+      return value !== undefined && value !== null && String(value).trim() !== '';
+    });
+
+    return matchingField ? String(record[matchingField]) : '';
+  };
+
+  const formatDashboardCount = (items, singularLabel, pluralLabel) => {
+    const count = items.length;
+    return `${count} ${count === 1 ? singularLabel : pluralLabel}`;
+  };
+
+  const renderCustomerSummaryList = (summaryItems) => {
+    return `
+      <dl class="dashboard-summary-list">
+        ${summaryItems
+          .map(
+            (item) => `
+              <div>
+                <dt>${escapeHtml(item.label)}</dt>
+                <dd>${escapeHtml(item.value)}</dd>
+              </div>
+            `,
+          )
+          .join('')}
+      </dl>
+    `;
+  };
+
+  const renderCustomerRecordList = (items, options = {}) => {
+    const emptyText = options.emptyText || 'No records are available yet.';
+    const itemTitle = options.itemTitle || ((item, index) => `Item ${index + 1}`);
+    const detailRows = options.detailRows || (() => []);
+
+    if (!items.length) {
+      return `<p class="dashboard-section-empty">${escapeHtml(emptyText)}</p>`;
+    }
+
+    return `
+      <div class="dashboard-record-list">
+        ${items
+          .map((item, index) => {
+            const rows = detailRows(item, index)
+              .filter((row) => row && row.value)
+              .slice(0, 3);
+
+            return `
+              <article class="dashboard-record-item">
+                <h4>${escapeHtml(itemTitle(item, index))}</h4>
+                <dl>
+                  ${rows
+                    .map(
+                      (row) => `
+                        <div>
+                          <dt>${escapeHtml(row.label)}</dt>
+                          <dd>${escapeHtml(row.value)}</dd>
+                        </div>
+                      `,
+                    )
+                    .join('')}
+                </dl>
+              </article>
+            `;
+          })
+          .join('')}
+      </div>
+    `;
+  };
+
+  const renderCustomerDataCard = (config) => {
+    const actionsMarkup = (config.links || [])
+      .map(
+        (link) => `
+          <a class="button button-secondary dashboard-role-link" href="${localPath(link.href)}">${escapeHtml(link.label)}</a>
+        `,
+      )
+      .join('');
+
+    return `
+      <article class="feature-card dashboard-role-card ${escapeHtml(config.stateClass || '')}">
+        <span class="panel-label">${escapeHtml(config.label)}</span>
+        <h3>${escapeHtml(config.title)}</h3>
+        <p>${escapeHtml(config.text)}</p>
+        ${config.body || ''}
+        <div class="dashboard-role-actions">${actionsMarkup}</div>
+      </article>
+    `;
+  };
+
+  const createCustomerLoadingCards = () => {
+    return [
+      {
+        label: 'Bookings',
+        title: 'Loading your bookings',
+        text: 'We are requesting customer-specific booking data from the Users API group now.',
+        stateClass: 'is-loading',
+        body: '<p class="dashboard-section-note">Please wait while your booking summary is prepared.</p>',
+        links: [{ label: 'View bookings page', href: 'bookings.html' }],
+      },
+      {
+        label: 'Reviews',
+        title: 'Loading your reviews',
+        text: 'We are requesting your saved review history from the Users API group now.',
+        stateClass: 'is-loading',
+        body: '<p class="dashboard-section-note">Please wait while your review summary is prepared.</p>',
+        links: [{ label: 'Read reviews page', href: 'reviews.html' }],
+      },
+    ];
+  };
+
+  const createCustomerCardsFromData = (bookingsResult, reviewsResult) => {
+    const bookingItems = getCollectionItems(bookingsResult.data);
+    const reviewItems = getCollectionItems(reviewsResult.data);
+    const bookingError = !bookingsResult.ok ? bookingsResult.errorMessage || 'We could not load your bookings right now.' : '';
+    const reviewError = !reviewsResult.ok ? reviewsResult.errorMessage || 'We could not load your reviews right now.' : '';
+
+    return [
+      {
+        label: 'Bookings',
+        title: bookingsResult.ok
+          ? bookingItems.length
+            ? `You have ${formatDashboardCount(bookingItems, 'booking', 'bookings')}`
+            : 'No bookings yet'
+          : 'Bookings could not be loaded',
+        text: bookingsResult.ok
+          ? bookingItems.length
+            ? 'Here is a quick summary of the booking records returned for your customer account.'
+            : 'The request worked, but there are no booking records for this customer account yet.'
+          : bookingError,
+        stateClass: bookingsResult.ok ? (bookingItems.length ? 'is-success' : '') : 'is-error',
+        body: bookingsResult.ok
+          ? `
+            ${renderCustomerSummaryList([
+              { label: 'Total bookings', value: formatDashboardCount(bookingItems, 'booking', 'bookings') },
+              {
+                label: 'Latest status',
+                value: getFirstMatchingValue(bookingItems[0], ['status', 'booking_status', 'state']) || 'Not available yet',
+              },
+            ])}
+            ${renderCustomerRecordList(bookingItems.slice(0, 3), {
+              emptyText: 'When you create a booking, it will appear here.',
+              itemTitle: (item, index) =>
+                getFirstMatchingValue(item, ['service_name', 'service', 'title', 'tailor_name', 'tailor']) || `Booking ${index + 1}`,
+              detailRows: (item) => [
+                { label: 'Status', value: getFirstMatchingValue(item, ['status', 'booking_status', 'state']) || 'Pending update' },
+                { label: 'Date', value: getFirstMatchingValue(item, ['appointment_date', 'date', 'booking_date', 'created_at']) || 'Date not available' },
+                { label: 'Tailor', value: getFirstMatchingValue(item, ['tailor_name', 'tailor', 'shop_name']) || 'Tailor not listed' },
+              ],
+            })}
+          `
+          : '<p class="dashboard-section-note">Try refreshing the page or signing in again if your session has expired.</p>',
+        links: [
+          { label: 'View bookings', href: 'bookings.html' },
+          { label: 'Browse tailors', href: 'tailors.html' },
+        ],
+      },
+      {
+        label: 'Reviews',
+        title: reviewsResult.ok
+          ? reviewItems.length
+            ? `You have ${formatDashboardCount(reviewItems, 'review', 'reviews')}`
+            : 'No reviews yet'
+          : 'Reviews could not be loaded',
+        text: reviewsResult.ok
+          ? reviewItems.length
+            ? 'Here is a quick summary of the review records returned for your customer account.'
+            : 'The request worked, but there are no review records for this customer account yet.'
+          : reviewError,
+        stateClass: reviewsResult.ok ? (reviewItems.length ? 'is-success' : '') : 'is-error',
+        body: reviewsResult.ok
+          ? `
+            ${renderCustomerSummaryList([
+              { label: 'Total reviews', value: formatDashboardCount(reviewItems, 'review', 'reviews') },
+              {
+                label: 'Latest rating',
+                value: getFirstMatchingValue(reviewItems[0], ['rating', 'stars', 'score']) || 'Not available yet',
+              },
+            ])}
+            ${renderCustomerRecordList(reviewItems.slice(0, 3), {
+              emptyText: 'When you submit a review, it will appear here.',
+              itemTitle: (item, index) =>
+                getFirstMatchingValue(item, ['title', 'tailor_name', 'tailor', 'service_name']) || `Review ${index + 1}`,
+              detailRows: (item) => [
+                { label: 'Rating', value: getFirstMatchingValue(item, ['rating', 'stars', 'score']) || 'No rating listed' },
+                { label: 'Tailor', value: getFirstMatchingValue(item, ['tailor_name', 'tailor', 'shop_name']) || 'Tailor not listed' },
+                { label: 'Comment', value: getFirstMatchingValue(item, ['comment', 'review', 'content']) || 'No comment included' },
+              ],
+            })}
+          `
+          : '<p class="dashboard-section-note">Try refreshing the page or opening the reviews page again later.</p>',
+        links: [{ label: 'Read reviews', href: 'reviews.html' }],
+      },
+    ];
   };
 
   // Keep the role-based dashboard content in plain data so it is easy for a
@@ -762,6 +985,35 @@ if (pageKey === 'dashboard') {
     dashboardRoleTitle.textContent = roleContent.title;
     dashboardRoleGrid.innerHTML = roleContent.cards
       .map((card) => {
+        const linksMarkup = (card.links || [])
+          .map(
+            (link) => `
+              <a class="button button-secondary dashboard-role-link" href="${localPath(link.href)}">${escapeHtml(link.label)}</a>
+            `,
+          )
+          .join('');
+
+        return `
+          <article class="feature-card dashboard-role-card">
+            <span class="panel-label">${escapeHtml(card.label)}</span>
+            <h3>${escapeHtml(card.title)}</h3>
+            <p>${escapeHtml(card.text)}</p>
+            <div class="dashboard-role-actions">${linksMarkup}</div>
+          </article>
+        `;
+      })
+      .join('');
+  };
+
+  const renderDashboardCards = (title, copy, cards) => {
+    dashboardRoleTitle.textContent = title;
+    dashboardRoleCopy.textContent = copy;
+    dashboardRoleGrid.innerHTML = cards
+      .map((card) => {
+        if (card.body !== undefined || card.stateClass !== undefined) {
+          return renderCustomerDataCard(card);
+        }
+
         const linksMarkup = (card.links || [])
           .map(
             (link) => `
@@ -907,7 +1159,62 @@ if (pageKey === 'dashboard') {
             </div>`,
           stateClass: 'is-success',
         });
-        renderRoleCards(userRole);
+        if (userRole === 'customer') {
+          renderDashboardCards(
+            'Customer dashboard sections',
+            'These sections now use the Users API group helpers to load bookings and reviews for the signed-in customer.',
+            createCustomerLoadingCards(),
+          );
+
+          const [bookingsResult, reviewsResult] = await Promise.all([
+            apiHelpers.getUserBookings(),
+            apiHelpers.getUserReviews(),
+          ]);
+
+          if (apiHelpers.isUnauthorizedResponse(bookingsResult) || apiHelpers.isUnauthorizedResponse(reviewsResult)) {
+            updateDashboardState({
+              title: 'Your session has expired.',
+              description: 'A customer dashboard request came back as unauthorized, so we are clearing your saved token now.',
+              welcomeTitle: 'Please log in again',
+              welcomeText: 'Redirecting you to the login page so you can start a fresh session.',
+              userFields: `
+                <div>
+                  <dt>Status</dt>
+                  <dd>Unauthorized session</dd>
+                </div>
+                <div>
+                  <dt>Next step</dt>
+                  <dd>Clearing token and redirecting to login...</dd>
+                </div>
+              `,
+              stateClass: 'is-error',
+            });
+
+            renderDashboardCards('Session expired', 'Your secure customer data could not be loaded with the saved session.', [
+              {
+                label: 'Login Required',
+                title: 'Please sign in again',
+                text: 'Your saved token is being cleared before the dashboard redirects to the shared login page.',
+                stateClass: 'is-error',
+                body: '<p class="dashboard-section-note">A fresh sign-in is needed before customer data can be requested again.</p>',
+                links: [{ label: 'Go to login', href: 'login.html' }],
+              },
+            ]);
+
+            window.setTimeout(() => {
+              clearSessionAndGoToLogin();
+            }, 800);
+            return;
+          }
+
+          renderDashboardCards(
+            'Customer dashboard sections',
+            'These summaries come from window.TailorMarketplaceApi.getUserBookings() and window.TailorMarketplaceApi.getUserReviews().',
+            createCustomerCardsFromData(bookingsResult, reviewsResult),
+          );
+        } else {
+          renderRoleCards(userRole);
+        }
       } catch (error) {
         updateDashboardState({
           title: 'The dashboard request could not finish.',

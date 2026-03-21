@@ -460,6 +460,62 @@ button {
   gap: 1rem;
 }
 
+.dashboard-summary-list,
+.dashboard-record-item dl {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.dashboard-summary-list div,
+.dashboard-record-item dl div {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.85rem 1rem;
+  border-radius: 14px;
+  background: var(--surface-alt);
+}
+
+.dashboard-summary-list dt,
+.dashboard-record-item dt {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.dashboard-summary-list dd,
+.dashboard-record-item dd {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.dashboard-record-list {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.dashboard-record-item {
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+}
+
+.dashboard-record-item h4 {
+  margin: 0 0 0.85rem;
+  font-size: 1rem;
+  color: var(--primary-dark);
+}
+
+.dashboard-section-note,
+.dashboard-section-empty {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
 .dashboard-role-actions {
   display: flex;
   flex-wrap: wrap;
