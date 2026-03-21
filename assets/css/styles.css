@@ -418,6 +418,58 @@ button {
   border-color: #fca5a5;
 }
 
+
+.dashboard-role-section {
+  margin-top: 1.5rem;
+}
+
+.dashboard-role-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.dashboard-role-header h2,
+.dashboard-role-card h3 {
+  margin: 0.9rem 0 0;
+  font-size: 1.6rem;
+  letter-spacing: -0.03em;
+}
+
+.dashboard-role-copy,
+.dashboard-role-card p {
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.dashboard-role-copy {
+  margin: 0;
+  max-width: 34rem;
+}
+
+.dashboard-role-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.25rem;
+}
+
+.dashboard-role-card {
+  display: grid;
+  gap: 1rem;
+}
+
+.dashboard-role-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.dashboard-role-link {
+  min-width: 10rem;
+}
+
 .tailors-section {
   margin-top: 1.5rem;
 }
@@ -547,13 +599,15 @@ button {
   .hero-card,
   .feature-grid,
   .dashboard-grid,
+  .dashboard-role-grid,
   .login-layout,
   .tailors-grid,
   .site-footer {
     grid-template-columns: 1fr;
   }
 
-  .tailors-section-header {
+  .tailors-section-header,
+  .dashboard-role-header {
     align-items: flex-start;
     flex-direction: column;
   }
