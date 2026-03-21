@@ -260,6 +260,8 @@ const getCurrentUser = () => authenticatedRequest('auth', API_ENDPOINTS.auth.cur
 // Tailor and marketplace helpers use the app API base automatically.
 const getTailors = () => getRequest('app', API_ENDPOINTS.app.tailors);
 const getTailorById = (tailorId) => getRequest('app', `${API_ENDPOINTS.app.tailors}/${tailorId}`);
+const getAppBookings = () => authenticatedRequest('app', API_ENDPOINTS.app.bookings, { method: 'GET' });
+const getAppReviews = () => authenticatedRequest('app', API_ENDPOINTS.app.reviews, { method: 'GET' });
 const createTailor = (tailorData) => authenticatedRequest('app', API_ENDPOINTS.app.tailors, {
   method: 'POST',
   body: JSON.stringify(tailorData),
@@ -309,6 +311,8 @@ window.TailorMarketplaceApi = {
   getCurrentUser,
   getTailors,
   getTailorById,
+  getAppBookings,
+  getAppReviews,
   createTailor,
   updateTailor,
   deleteTailor,
