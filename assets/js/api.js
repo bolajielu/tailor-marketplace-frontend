@@ -22,7 +22,10 @@ const API_ENDPOINTS = {
   auth: {
     login: '/auth/login',
     signup: '/auth/signup',
-    currentUser: '/auth/me',
+    // The real protected current-user route in Xano is /get_user_profile.
+    // Keeping that path here lets the shared getCurrentUser() helper stay the
+    // same everywhere else in the app.
+    currentUser: '/get_user_profile',
   },
   app: {
     tailors: '/tailor',
