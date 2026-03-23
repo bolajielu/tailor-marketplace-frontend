@@ -753,12 +753,13 @@ if (pageKey === 'dashboard') {
       return matchedByUserId;
     }
 
-    // Keep tailor.id as a fallback only. This is not the main relationship in
-    // the schema, but it can help when older sample records were created
-    // before the tailor.user_id field was connected.
+    // Keep tailor.id as a fallback only when tailor.user_id is missing. This
+    // avoids incorrect matches when an unrelated tailor.id happens to match a
+    // valid currentUser.id in a different record.
     const matchedByTailorIdFallback = tailorRecords.find((tailor) => {
+      const tailorUserId = getRecordIdentifier(tailor, ['user_id', 'userId']);
       const tailorId = getRecordIdentifier(tailor, ['id', 'tailor_id', 'tailorId']);
-      return Boolean(userId && tailorId && userId === tailorId);
+      return Boolean(userId && !tailorUserId && tailorId && userId === tailorId);
     });
 
     if (matchedByTailorIdFallback) {
@@ -1458,7 +1459,11 @@ if (pageKey === 'dashboard') {
             apiHelpers.getAppReviews(),
           ]);
 
-          if (apiHelpers.isUnauthorizedResponse(bookingsResult) || apiHelpers.isUnauthorizedResponse(reviewsResult)) {
+          if (
+            apiHelpers.isUnauthorizedResponse(tailorResult)
+            || apiHelpers.isUnauthorizedResponse(bookingsResult)
+            || apiHelpers.isUnauthorizedResponse(reviewsResult)
+          ) {
             updateDashboardState({
               title: 'Your session has expired.',
               description: 'A tailor dashboard request came back as unauthorized, so we are clearing your saved token now.',
