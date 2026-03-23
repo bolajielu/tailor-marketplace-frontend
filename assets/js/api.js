@@ -22,7 +22,10 @@ const API_ENDPOINTS = {
   auth: {
     login: '/auth/login',
     signup: '/auth/signup',
-    currentUser: '/auth/me',
+    // The real protected current-user route in Xano is /get_user_profile.
+    // Keeping that path here lets the shared getCurrentUser() helper stay the
+    // same everywhere else in the app.
+    currentUser: '/get_user_profile',
   },
   app: {
     tailors: '/tailor',
@@ -260,6 +263,8 @@ const getCurrentUser = () => authenticatedRequest('auth', API_ENDPOINTS.auth.cur
 // Tailor and marketplace helpers use the app API base automatically.
 const getTailors = () => getRequest('app', API_ENDPOINTS.app.tailors);
 const getTailorById = (tailorId) => getRequest('app', `${API_ENDPOINTS.app.tailors}/${tailorId}`);
+const getAppBookings = () => authenticatedRequest('app', API_ENDPOINTS.app.bookings, { method: 'GET' });
+const getAppReviews = () => authenticatedRequest('app', API_ENDPOINTS.app.reviews, { method: 'GET' });
 const createTailor = (tailorData) => authenticatedRequest('app', API_ENDPOINTS.app.tailors, {
   method: 'POST',
   body: JSON.stringify(tailorData),
@@ -309,6 +314,8 @@ window.TailorMarketplaceApi = {
   getCurrentUser,
   getTailors,
   getTailorById,
+  getAppBookings,
+  getAppReviews,
   createTailor,
   updateTailor,
   deleteTailor,

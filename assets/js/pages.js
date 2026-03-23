@@ -713,6 +713,101 @@ if (pageKey === 'dashboard') {
     return `${count} ${count === 1 ? singularLabel : pluralLabel}`;
   };
 
+  // Normalize text values before comparing them so small formatting
+  // differences from the API do not prevent a useful dashboard match.
+  const normalizeMatchValue = (value) => {
+    if (value === undefined || value === null) {
+      return '';
+    }
+
+    return String(value).trim().toLowerCase();
+  };
+
+  // Read the first available identifier-like value from a record.
+  const getRecordIdentifier = (record, fieldNames) => {
+    const rawValue = getFirstMatchingValue(record, fieldNames);
+    return normalizeMatchValue(rawValue);
+  };
+
+  // Build a helpful tailor profile match from the live /tailor directory.
+  // Real schema relationship:
+  // - user.id is the logged-in user's primary key
+  // - tailor.user_id points back to that user
+  // Safe fallback strategy:
+  // - First try tailor.user_id === currentUser.id
+  // - Then try a direct tailor.id fallback only if needed
+  // - Then try email and name fields if the related IDs are not available
+  // This keeps the dashboard aligned with the real schema while still handling
+  // incomplete sample data safely.
+  const findMatchingTailorProfile = (currentUser, tailorRecords) => {
+    const userId = getRecordIdentifier(currentUser, ['id']);
+    const userEmail = getRecordIdentifier(currentUser, ['email', 'contact_email', 'contactEmail']);
+    const userName = getRecordIdentifier(currentUser, ['business_name', 'shop_name', 'name', 'full_name', 'fullName']);
+
+    const matchedByUserId = tailorRecords.find((tailor) => {
+      const tailorUserId = getRecordIdentifier(tailor, ['user_id', 'userId']);
+      return Boolean(userId && tailorUserId && userId === tailorUserId);
+    });
+
+    if (matchedByUserId) {
+      return matchedByUserId;
+    }
+
+    // Keep tailor.id as a fallback only. This is not the main relationship in
+    // the schema, but it can help when older sample records were created
+    // before the tailor.user_id field was connected.
+    const matchedByTailorIdFallback = tailorRecords.find((tailor) => {
+      const tailorId = getRecordIdentifier(tailor, ['id', 'tailor_id', 'tailorId']);
+      return Boolean(userId && tailorId && userId === tailorId);
+    });
+
+    if (matchedByTailorIdFallback) {
+      return matchedByTailorIdFallback;
+    }
+
+    return tailorRecords.find((tailor) => {
+      const tailorEmail = getRecordIdentifier(tailor, ['email', 'contact_email', 'contactEmail']);
+      const tailorName = getRecordIdentifier(tailor, ['business_name', 'shop_name', 'name', 'full_name', 'fullName']);
+
+      return Boolean(
+        (userEmail && tailorEmail && userEmail === tailorEmail)
+        || (userName && tailorName && userName === tailorName),
+      );
+    }) || null;
+  };
+
+  // Keep tailor-related record filtering flexible because booking and review
+  // endpoints can use different field names for the linked tailor.
+  const filterRecordsForTailor = (records, currentUser, tailorProfile) => {
+    const tailorIds = [
+      getRecordIdentifier(tailorProfile, ['id', 'tailor_id', 'tailorId']),
+      getRecordIdentifier(tailorProfile, ['user_id', 'userId', 'owner_id', 'ownerId']),
+      getRecordIdentifier(currentUser, ['id']),
+    ].filter(Boolean);
+
+    const tailorNames = [
+      getRecordIdentifier(currentUser, ['business_name', 'shop_name', 'name', 'full_name', 'fullName']),
+      getRecordIdentifier(tailorProfile, ['business_name', 'shop_name', 'name', 'full_name', 'fullName']),
+    ].filter(Boolean);
+
+    const tailorEmails = [
+      getRecordIdentifier(currentUser, ['email', 'contact_email', 'contactEmail']),
+      getRecordIdentifier(tailorProfile, ['email', 'contact_email', 'contactEmail']),
+    ].filter(Boolean);
+
+    return records.filter((record) => {
+      const linkedId = getRecordIdentifier(record, ['tailor_id', 'tailorId', 'user_id', 'userId', 'owner_id', 'ownerId']);
+      const linkedName = getRecordIdentifier(record, ['tailor_name', 'tailor', 'shop_name', 'business_name', 'name']);
+      const linkedEmail = getRecordIdentifier(record, ['tailor_email', 'email', 'contact_email', 'contactEmail']);
+
+      return Boolean(
+        (linkedId && tailorIds.includes(linkedId))
+        || (linkedName && tailorNames.includes(linkedName))
+        || (linkedEmail && tailorEmails.includes(linkedEmail)),
+      );
+    });
+  };
+
   const renderCustomerSummaryList = (summaryItems) => {
     return `
       <dl class="dashboard-summary-list">
@@ -892,6 +987,144 @@ if (pageKey === 'dashboard') {
           `
           : '<p class="dashboard-section-note">Try refreshing the page or opening the reviews page again later.</p>',
         links: [{ label: 'Read reviews', href: 'reviews.html' }],
+      },
+    ];
+  };
+
+  const createTailorLoadingCards = () => {
+    return [
+      {
+        label: 'Tailor Profile',
+        title: 'Loading your tailor profile',
+        text: 'We are checking the live tailor directory for a profile that matches your signed-in account.',
+        stateClass: 'is-loading',
+        body: '<p class="dashboard-section-note">Please wait while the dashboard matches your account to a tailor record.</p>',
+        links: [{ label: 'Browse directory', href: 'tailors.html' }],
+      },
+      {
+        label: 'Tailor Activity',
+        title: 'Loading your booking and review summary',
+        text: 'We are requesting tailor-related bookings and reviews from the App API group now.',
+        stateClass: 'is-loading',
+        body: '<p class="dashboard-section-note">Please wait while your activity summary is prepared.</p>',
+        links: [
+          { label: 'Open bookings', href: 'bookings.html' },
+          { label: 'View reviews', href: 'reviews.html' },
+        ],
+      },
+    ];
+  };
+
+  const createTailorCardsFromData = (currentUser, tailorResult, bookingsResult, reviewsResult) => {
+    const tailorRecords = getCollectionItems(tailorResult.data);
+    const bookingItems = getCollectionItems(bookingsResult.data);
+    const reviewItems = getCollectionItems(reviewsResult.data);
+    const tailorProfile = findMatchingTailorProfile(currentUser, tailorRecords);
+    const matchingBookings = filterRecordsForTailor(bookingItems, currentUser, tailorProfile);
+    const matchingReviews = filterRecordsForTailor(reviewItems, currentUser, tailorProfile);
+    const profileName =
+      getFirstMatchingValue(tailorProfile, ['business_name', 'shop_name', 'name', 'full_name', 'fullName'])
+      || getUserDisplayName(currentUser);
+
+    const profileSummaryItems = [
+      { label: 'Display name', value: profileName },
+      {
+        label: 'Specialty',
+        value: getFirstMatchingValue(tailorProfile, ['specialty', 'speciality', 'service_type', 'category', 'focus']) || 'Not listed yet',
+      },
+      {
+        label: 'Location',
+        value: getFirstMatchingValue(tailorProfile, ['location', 'city', 'address', 'region']) || 'Not listed yet',
+      },
+      {
+        label: 'Phone',
+        value: getFirstMatchingValue(tailorProfile, ['phone', 'phone_number', 'phoneNumber']) || 'Not listed yet',
+      },
+    ];
+
+    const profileBody = tailorProfile
+      ? `
+        ${renderCustomerSummaryList(profileSummaryItems)}
+        <p class="dashboard-section-note">${escapeHtml(
+          getFirstMatchingValue(tailorProfile, ['bio', 'about', 'description'])
+            || 'This summary comes from the live tailor directory and can grow as more profile fields are added in Xano.',
+        )}</p>
+      `
+      : `
+        <p class="dashboard-section-empty">We loaded the live tailor directory, but we could not find a direct tailor profile match for this signed-in account yet.</p>
+        <p class="dashboard-section-note">Fallback strategy: the dashboard compares common ID, email, and name fields from <code>/auth/me</code> and <code>GET /tailor</code> until a dedicated &quot;my tailor profile&quot; endpoint is available.</p>
+      `;
+
+    const activityStateClass = bookingsResult.ok && reviewsResult.ok
+      ? (matchingBookings.length || matchingReviews.length ? 'is-success' : 'is-empty')
+      : 'is-error';
+
+    return [
+      {
+        label: 'Tailor Profile',
+        title: tailorProfile ? 'Live tailor profile found' : 'Profile match still needed',
+        text: tailorProfile
+          ? 'Your dashboard matched this signed-in account to a real tailor record from the App API group.'
+          : tailorResult.ok
+            ? 'The tailor directory loaded, but this account could not be matched to one profile record yet.'
+            : tailorResult.errorMessage || 'The tailor directory could not be loaded right now.',
+        stateClass: tailorProfile ? 'is-success' : (tailorResult.ok ? 'is-empty' : 'is-error'),
+        body: profileBody,
+        links: [{ label: 'Browse directory', href: 'tailors.html' }],
+      },
+      {
+        label: 'Tailor Activity',
+        title: activityStateClass === 'is-error'
+          ? 'Activity summary could not be fully loaded'
+          : matchingBookings.length || matchingReviews.length
+            ? 'Your live tailor activity summary'
+            : 'No tailor activity is linked yet',
+        text: activityStateClass === 'is-error'
+          ? `${bookingsResult.ok ? '' : bookingsResult.errorMessage || 'Bookings could not be loaded.'} ${reviewsResult.ok ? '' : reviewsResult.errorMessage || 'Reviews could not be loaded.'}`.trim()
+          : matchingBookings.length || matchingReviews.length
+            ? 'These counts are based on tailor-related booking and review records returned from the App API group.'
+            : 'The requests worked, but we did not find booking or review records linked to this tailor yet.',
+        stateClass: activityStateClass,
+        body: activityStateClass === 'is-error'
+          ? '<p class="dashboard-section-note">If these requests need different backend permissions, the profile summary above still gives the tailor a useful live snapshot.</p>'
+          : `
+            ${renderCustomerSummaryList([
+              { label: 'Bookings linked to this tailor', value: formatDashboardCount(matchingBookings, 'booking', 'bookings') },
+              { label: 'Reviews linked to this tailor', value: formatDashboardCount(matchingReviews, 'review', 'reviews') },
+              {
+                label: 'Latest booking status',
+                value: getFirstMatchingValue(matchingBookings[0], ['status', 'booking_status', 'state']) || 'Not available yet',
+              },
+              {
+                label: 'Latest review rating',
+                value: getFirstMatchingValue(matchingReviews[0], ['rating', 'stars', 'score']) || 'Not available yet',
+              },
+            ])}
+            ${renderCustomerRecordList(matchingBookings.slice(0, 2), {
+              emptyText: 'When a booking is linked to this tailor, it will appear here.',
+              itemTitle: (item, index) =>
+                getFirstMatchingValue(item, ['service_name', 'service', 'title', 'customer_name']) || `Booking ${index + 1}`,
+              detailRows: (item) => [
+                { label: 'Status', value: getFirstMatchingValue(item, ['status', 'booking_status', 'state']) || 'Pending update' },
+                { label: 'Date', value: getFirstMatchingValue(item, ['appointment_date', 'date', 'booking_date', 'created_at']) || 'Date not available' },
+                { label: 'Customer', value: getFirstMatchingValue(item, ['customer_name', 'customer', 'name']) || 'Customer not listed' },
+              ],
+            })}
+            ${renderCustomerRecordList(matchingReviews.slice(0, 2), {
+              emptyText: 'When a review is linked to this tailor, it will appear here.',
+              itemTitle: (item, index) =>
+                getFirstMatchingValue(item, ['title', 'service_name', 'customer_name']) || `Review ${index + 1}`,
+              detailRows: (item) => [
+                { label: 'Rating', value: getFirstMatchingValue(item, ['rating', 'stars', 'score']) || 'No rating listed' },
+                { label: 'Customer', value: getFirstMatchingValue(item, ['customer_name', 'customer', 'name']) || 'Customer not listed' },
+                { label: 'Comment', value: getFirstMatchingValue(item, ['comment', 'review', 'content']) || 'No comment included' },
+              ],
+            })}
+          `,
+        links: [
+          { label: 'Open bookings', href: 'bookings.html' },
+          { label: 'View reviews', href: 'reviews.html' },
+        ],
       },
     ];
   };
@@ -1211,6 +1444,60 @@ if (pageKey === 'dashboard') {
             'Customer dashboard sections',
             'These summaries come from window.TailorMarketplaceApi.getUserBookings() and window.TailorMarketplaceApi.getUserReviews().',
             createCustomerCardsFromData(bookingsResult, reviewsResult),
+          );
+        } else if (userRole === 'tailor') {
+          renderDashboardCards(
+            'Tailor dashboard sections',
+            'These sections use live tailor-related data from the App API group while keeping the protected dashboard flow the same.',
+            createTailorLoadingCards(),
+          );
+
+          const [tailorResult, bookingsResult, reviewsResult] = await Promise.all([
+            apiHelpers.getTailors(),
+            apiHelpers.getAppBookings(),
+            apiHelpers.getAppReviews(),
+          ]);
+
+          if (apiHelpers.isUnauthorizedResponse(bookingsResult) || apiHelpers.isUnauthorizedResponse(reviewsResult)) {
+            updateDashboardState({
+              title: 'Your session has expired.',
+              description: 'A tailor dashboard request came back as unauthorized, so we are clearing your saved token now.',
+              welcomeTitle: 'Please log in again',
+              welcomeText: 'Redirecting you to the login page so you can start a fresh session.',
+              userFields: `
+                <div>
+                  <dt>Status</dt>
+                  <dd>Unauthorized session</dd>
+                </div>
+                <div>
+                  <dt>Next step</dt>
+                  <dd>Clearing token and redirecting to login...</dd>
+                </div>
+              `,
+              stateClass: 'is-error',
+            });
+
+            renderDashboardCards('Session expired', 'Your secure tailor data could not be loaded with the saved session.', [
+              {
+                label: 'Login Required',
+                title: 'Please sign in again',
+                text: 'Your saved token is being cleared before the dashboard redirects to the shared login page.',
+                stateClass: 'is-error',
+                body: '<p class="dashboard-section-note">A fresh sign-in is needed before tailor dashboard data can be requested again.</p>',
+                links: [{ label: 'Go to login', href: 'login.html' }],
+              },
+            ]);
+
+            window.setTimeout(() => {
+              clearSessionAndGoToLogin();
+            }, 800);
+            return;
+          }
+
+          renderDashboardCards(
+            'Tailor dashboard sections',
+            'These summaries come from window.TailorMarketplaceApi.getTailors(), getAppBookings(), and getAppReviews().',
+            createTailorCardsFromData(currentUser, tailorResult, bookingsResult, reviewsResult),
           );
         } else {
           renderRoleCards(userRole);
