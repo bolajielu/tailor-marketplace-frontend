@@ -750,6 +750,10 @@ button {
   width: fit-content;
 }
 
+.tailor-booking-link {
+  width: fit-content;
+}
+
 .tailor-portfolio-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
@@ -786,6 +790,69 @@ button {
 
 .tailor-detail-status-panel.is-empty,
 .tailor-detail-card.is-empty {
+  border-color: #fcd34d;
+}
+
+.bookings-context-section {
+  margin-top: 1.5rem;
+}
+
+.bookings-context-card {
+  display: grid;
+  gap: 1rem;
+}
+
+.bookings-context-card h2 {
+  margin: 0.9rem 0 0;
+  font-size: 1.8rem;
+  letter-spacing: -0.03em;
+}
+
+.bookings-context-summary {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.bookings-context-meta {
+  display: grid;
+  gap: 0.85rem;
+  margin: 0;
+}
+
+.bookings-context-meta div {
+  padding: 0.85rem 1rem;
+  border-radius: 14px;
+  background: var(--surface-alt);
+}
+
+.bookings-context-meta dt {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.bookings-context-meta dd {
+  margin: 0.25rem 0 0;
+  color: var(--muted);
+}
+
+.bookings-status-panel.is-loading,
+.bookings-context-card.is-loading {
+  border-color: #bfdbfe;
+}
+
+.bookings-status-panel.is-success,
+.bookings-context-card.is-success {
+  border-color: #86efac;
+}
+
+.bookings-status-panel.is-error,
+.bookings-context-card.is-error {
+  border-color: #fca5a5;
+}
+
+.bookings-status-panel.is-empty,
+.bookings-context-card.is-empty {
   border-color: #fcd34d;
 }
 

@@ -522,16 +522,61 @@ const renderTailorDetailShell = () => `
   </section>
 `;
 
+// Keep the Bookings page shell consistent with other pages while creating
+// a dedicated area where selected-tailor booking context can load.
+const renderBookingsShell = () => `
+  <section class="hero-card">
+    <article class="hero-copy">
+      <span class="eyebrow">${page.heroEyebrow}</span>
+      <h1>${page.heroTitle}</h1>
+      <p>${page.heroText}</p>
+      <div class="hero-actions">
+        <a class="button button-primary" href="${localPath(page.primaryAction.href)}">${page.primaryAction.label}</a>
+        <a class="button button-secondary" href="${localPath(page.secondaryAction.href)}">${page.secondaryAction.label}</a>
+      </div>
+    </article>
+
+    <aside class="hero-panel bookings-status-panel" id="bookings-status-panel" aria-live="polite">
+      <p class="panel-label">Booking Status</p>
+      <h2>Ready to start booking</h2>
+      <p>Select a tailor profile to prefill this page with context, or continue with a general booking view.</p>
+    </aside>
+  </section>
+
+  <section class="bookings-context-section" aria-labelledby="bookings-context-title">
+    <article class="feature-card bookings-context-card" id="bookings-context-card">
+      <span class="panel-label">Selected Tailor</span>
+      <h2 id="bookings-context-title">No tailor selected yet</h2>
+      <p>Open this page from a tailor profile using a URL like <code>bookings.html?tailorId=1</code> to load a specific booking context.</p>
+    </article>
+  </section>
+
+  <section class="feature-grid" aria-label="Bookings page highlights">
+    ${page.highlights
+      .map(
+        (item) => `
+          <article class="feature-card">
+            <h2>${item.title}</h2>
+            <p>${item.text}</p>
+          </article>
+        `,
+      )
+      .join('')}
+  </section>
+`;
+
 contentRoot.innerHTML =
   pageKey === 'login'
     ? renderLoginPage()
     : pageKey === 'signup'
       ? renderSignupPage()
       : pageKey === 'dashboard'
-        ? renderDashboardShell()
-        : pageKey === 'tailors'
-          ? renderTailorsShell()
-          : pageKey === 'tailor-detail'
+      ? renderDashboardShell()
+      : pageKey === 'tailors'
+        ? renderTailorsShell()
+        : pageKey === 'bookings'
+          ? renderBookingsShell()
+        : pageKey === 'tailor-detail'
             ? renderTailorDetailShell()
           : renderStandardPage();
 
@@ -1937,6 +1982,7 @@ if (pageKey === 'tailor-detail') {
     const priceRange = getFirstFilledValue(tailorData, ['price_range']) || 'Price range not listed';
     const turnaroundTime = getFirstFilledValue(tailorData, ['turnaround_time']) || 'Turnaround time not listed';
     const whatsappLinkRaw = getFirstFilledValue(tailorData, ['whatsapp_link']);
+    const tailorId = getFirstFilledValue(tailorData, ['id', 'tailor_id', 'tailorId']);
     const profileImageUrl = getSafeImageUrl(tailorData && tailorData.profile_picture);
     const servicesOffered = getArrayField(tailorData, 'services_offered');
     const portfolioImages = getArrayField(tailorData, 'portfolio_images');
@@ -1964,6 +2010,7 @@ if (pageKey === 'tailor-detail') {
         </a>
       `
       : '<p class="tailor-detail-empty-text">WhatsApp link not added yet.</p>';
+    const bookingLink = tailorId ? `bookings.html?tailorId=${encodeURIComponent(tailorId)}` : 'bookings.html';
 
     return {
       name: businessName,
@@ -1999,6 +2046,7 @@ if (pageKey === 'tailor-detail') {
         <section class="tailor-detail-group" aria-label="Contact">
           <h3>Contact</h3>
           ${contactMarkup}
+          <a class="button button-secondary tailor-booking-link" href="${bookingLink}">Book this tailor</a>
         </section>
 
         <section class="tailor-detail-group" aria-label="Portfolio">
@@ -2071,6 +2119,136 @@ if (pageKey === 'tailor-detail') {
         description: 'We could not reach Xano right now. Please check your connection and try again.',
         cardTitle: 'Request could not finish',
         cardBody: '<p>The detail page keeps this message visible so the issue is clear to visitors.</p>',
+        stateClass: 'is-error',
+      });
+    }
+  })();
+}
+
+if (pageKey === 'bookings') {
+  const bookingsStatusPanel = document.querySelector('#bookings-status-panel');
+  const bookingsContextCard = document.querySelector('#bookings-context-card');
+  const apiHelpers = window.TailorMarketplaceApi;
+
+  const getTailorIdFromQuery = () => {
+    const queryParams = new URLSearchParams(window.location.search);
+    const queryTailorId = queryParams.get('tailorId');
+    return queryTailorId && queryTailorId.trim() ? queryTailorId.trim() : '';
+  };
+
+  const getFirstFilledValue = (record, fieldNames) => {
+    for (const fieldName of fieldNames) {
+      const value = record && record[fieldName];
+
+      if (value === 0) {
+        return '0';
+      }
+
+      if (typeof value === 'string' && value.trim()) {
+        return value.trim();
+      }
+
+      if (typeof value === 'number' || typeof value === 'boolean') {
+        return String(value);
+      }
+    }
+
+    return '';
+  };
+
+  const updateBookingsState = ({ title, description, cardTitle, cardBody, stateClass = '' }) => {
+    bookingsStatusPanel.className = `hero-panel bookings-status-panel ${stateClass}`.trim();
+    bookingsStatusPanel.innerHTML = `
+      <p class="panel-label">Booking Status</p>
+      <h2>${escapeHtml(title)}</h2>
+      <p>${escapeHtml(description)}</p>
+    `;
+
+    bookingsContextCard.className = `feature-card bookings-context-card ${stateClass}`.trim();
+    bookingsContextCard.innerHTML = `
+      <span class="panel-label">Selected Tailor</span>
+      <h2 id="bookings-context-title">${escapeHtml(cardTitle)}</h2>
+      ${cardBody}
+    `;
+  };
+
+  (async () => {
+    const tailorId = getTailorIdFromQuery();
+
+    if (!tailorId) {
+      updateBookingsState({
+        title: 'Generic booking view',
+        description: 'No tailor ID was found in the URL query string, so this page is showing a safe default view.',
+        cardTitle: 'Choose a tailor to start',
+        cardBody: '<p>You can still continue browsing and return here later from any tailor profile.</p>',
+        stateClass: 'is-empty',
+      });
+      return;
+    }
+
+    updateBookingsState({
+      title: 'Loading selected tailor...',
+      description: `Found tailorId=${tailorId} in the URL. Requesting profile data with getTailorById().`,
+      cardTitle: 'Preparing booking context',
+      cardBody: '<p>Please wait while we load this tailor profile.</p>',
+      stateClass: 'is-loading',
+    });
+
+    try {
+      const result = await apiHelpers.getTailorById(tailorId);
+      const tailorData = result && result.data;
+
+      if (!result.ok) {
+        updateBookingsState({
+          title: 'We could not load the selected tailor.',
+          description: result.errorMessage || 'The booking context request returned an error response.',
+          cardTitle: 'Selected tailor is unavailable',
+          cardBody: '<p>Please go back to the tailor directory and try another profile.</p>',
+          stateClass: 'is-error',
+        });
+        return;
+      }
+
+      if (!tailorData || (typeof tailorData === 'object' && !Object.keys(tailorData).length)) {
+        updateBookingsState({
+          title: 'The selected tailor was not found.',
+          description: 'The request finished, but no record was returned for this tailor ID.',
+          cardTitle: 'No profile data found',
+          cardBody: '<p>Try opening bookings from another tailor profile.</p>',
+          stateClass: 'is-empty',
+        });
+        return;
+      }
+
+      const businessName = getFirstFilledValue(tailorData, ['business_name', 'shop_name', 'name']) || 'Tailor profile';
+      const location = getFirstFilledValue(tailorData, ['location', 'city', 'address']) || 'Location not listed';
+      const bio = getFirstFilledValue(tailorData, ['bio', 'about', 'description']) || 'No profile summary is available yet.';
+
+      updateBookingsState({
+        title: 'Tailor context is ready',
+        description: 'This booking page is now linked to the selected tailor from the detail page.',
+        cardTitle: businessName,
+        cardBody: `
+          <p class="bookings-context-summary">${escapeHtml(bio)}</p>
+          <dl class="bookings-context-meta">
+            <div>
+              <dt>Tailor ID</dt>
+              <dd>${escapeHtml(tailorId)}</dd>
+            </div>
+            <div>
+              <dt>Location</dt>
+              <dd>${escapeHtml(location)}</dd>
+            </div>
+          </dl>
+        `,
+        stateClass: 'is-success',
+      });
+    } catch (error) {
+      updateBookingsState({
+        title: 'Network error while loading booking context.',
+        description: 'We could not reach Xano right now. Please check your connection and try again.',
+        cardTitle: 'Selected tailor could not be loaded',
+        cardBody: '<p>The booking page stays usable, but this tailor context could not be prepared.</p>',
         stateClass: 'is-error',
       });
     }
