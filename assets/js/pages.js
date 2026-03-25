@@ -730,23 +730,26 @@ if (pageKey === 'dashboard') {
   };
 
   // Build a helpful tailor profile match from the live /tailor directory.
-  // Safe fallback strategy:
-  // - First try direct IDs such as tailor_id, user_id, or id.
+  // Safe matching strategy:
+  // - First match the real schema relationship: tailor.user_id === currentUser.id.
+  // - Allow a fallback id match only when tailor.user_id is missing/empty.
   // - Then try email and name fields.
   // - If no direct "my tailor profile" endpoint exists yet, this lets the
   //   dashboard still show real tailor data without hardcoding API URLs here.
   const findMatchingTailorProfile = (currentUser, tailorRecords) => {
-    const userId = getRecordIdentifier(currentUser, ['tailor_id', 'tailorId', 'user_id', 'userId', 'id']);
+    const userId = getRecordIdentifier(currentUser, ['id']);
     const userEmail = getRecordIdentifier(currentUser, ['email', 'contact_email', 'contactEmail']);
     const userName = getRecordIdentifier(currentUser, ['business_name', 'shop_name', 'name', 'full_name', 'fullName']);
 
     return tailorRecords.find((tailor) => {
-      const tailorId = getRecordIdentifier(tailor, ['id', 'tailor_id', 'tailorId', 'user_id', 'userId', 'owner_id', 'ownerId']);
+      const tailorUserId = getRecordIdentifier(tailor, ['user_id', 'userId']);
+      const tailorId = getRecordIdentifier(tailor, ['id', 'tailor_id', 'tailorId']);
       const tailorEmail = getRecordIdentifier(tailor, ['email', 'contact_email', 'contactEmail']);
       const tailorName = getRecordIdentifier(tailor, ['business_name', 'shop_name', 'name', 'full_name', 'fullName']);
 
       return Boolean(
-        (userId && tailorId && userId === tailorId)
+        (userId && tailorUserId && userId === tailorUserId)
+        || (userId && !tailorUserId && tailorId && userId === tailorId)
         || (userEmail && tailorEmail && userEmail === tailorEmail)
         || (userName && tailorName && userName === tailorName),
       );
@@ -1434,7 +1437,9 @@ if (pageKey === 'dashboard') {
             apiHelpers.getAppReviews(),
           ]);
 
-          if (apiHelpers.isUnauthorizedResponse(bookingsResult) || apiHelpers.isUnauthorizedResponse(reviewsResult)) {
+          if (apiHelpers.isUnauthorizedResponse(tailorResult)
+            || apiHelpers.isUnauthorizedResponse(bookingsResult)
+            || apiHelpers.isUnauthorizedResponse(reviewsResult)) {
             updateDashboardState({
               title: 'Your session has expired.',
               description: 'A tailor dashboard request came back as unauthorized, so we are clearing your saved token now.',
