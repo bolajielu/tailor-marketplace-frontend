@@ -574,6 +574,15 @@ button {
   gap: 1rem;
 }
 
+.tailor-card-link {
+  justify-self: flex-start;
+}
+
+.tailor-card-link-note {
+  margin: 0;
+  color: var(--muted);
+}
+
 .tailor-card-specialty {
   margin: 0;
   font-weight: 600;
@@ -619,6 +628,69 @@ button {
 
 .tailors-status-panel.is-empty,
 .tailors-listing-state.is-empty {
+  border-color: #fcd34d;
+}
+
+.tailor-detail-section {
+  margin-top: 1.5rem;
+}
+
+.tailor-detail-card {
+  display: grid;
+  gap: 1rem;
+}
+
+.tailor-detail-card h2 {
+  margin: 0.9rem 0 0;
+  font-size: 1.8rem;
+  letter-spacing: -0.03em;
+}
+
+.tailor-detail-bio {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.tailor-detail-meta {
+  display: grid;
+  gap: 0.85rem;
+  margin: 0;
+}
+
+.tailor-detail-meta div {
+  padding: 0.85rem 1rem;
+  border-radius: 14px;
+  background: var(--surface-alt);
+}
+
+.tailor-detail-meta dt {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.tailor-detail-meta dd {
+  margin: 0.25rem 0 0;
+  color: var(--muted);
+}
+
+.tailor-detail-status-panel.is-loading,
+.tailor-detail-card.is-loading {
+  border-color: #bfdbfe;
+}
+
+.tailor-detail-status-panel.is-success,
+.tailor-detail-card.is-success {
+  border-color: #86efac;
+}
+
+.tailor-detail-status-panel.is-error,
+.tailor-detail-card.is-error {
+  border-color: #fca5a5;
+}
+
+.tailor-detail-status-panel.is-empty,
+.tailor-detail-card.is-empty {
   border-color: #fcd34d;
 }
 

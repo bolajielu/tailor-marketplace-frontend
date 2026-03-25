@@ -75,6 +75,19 @@ const pageContent = {
       { title: 'Responsive catalog', text: 'Directory content can expand into multiple columns on large screens.' },
     ],
   },
+  tailorDetail: {
+    heroEyebrow: 'Tailor Profile',
+    heroTitle: 'View a tailor profile loaded from live Xano data.',
+    heroText:
+      'This detail page reads the tailor ID from the URL, requests one record with getTailorById(), and shows beginner-friendly loading, empty, and error states.',
+    primaryAction: { label: 'Back to Tailors', href: 'tailors.html' },
+    secondaryAction: { label: 'Book a Consultation', href: 'bookings.html' },
+    highlights: [
+      { title: 'Live record lookup', text: 'The page loads one tailor profile from the App API group using the shared helper.' },
+      { title: 'URL-driven routing', text: 'You can open this page with a query string or path segment tailor ID.' },
+      { title: 'Clear fallback states', text: 'Missing IDs, empty records, and request errors each show helpful messages.' },
+    ],
+  },
   bookings: {
     heroEyebrow: 'My Bookings',
     heroTitle: 'Review upcoming fittings, alterations, and delivery milestones.',
@@ -464,6 +477,49 @@ const renderTailorsShell = () => `
   </section>
 `;
 
+// Keep the Tailor detail page shell lightweight so it can immediately show
+// loading status before the record request finishes.
+const renderTailorDetailShell = () => `
+  <section class="hero-card">
+    <article class="hero-copy">
+      <span class="eyebrow">${page.heroEyebrow}</span>
+      <h1>${page.heroTitle}</h1>
+      <p>${page.heroText}</p>
+      <div class="hero-actions">
+        <a class="button button-primary" href="${localPath(page.primaryAction.href)}">${page.primaryAction.label}</a>
+        <a class="button button-secondary" href="${localPath(page.secondaryAction.href)}">${page.secondaryAction.label}</a>
+      </div>
+    </article>
+
+    <aside class="hero-panel tailor-detail-status-panel is-loading" id="tailor-detail-status-panel" aria-live="polite">
+      <p class="panel-label">Profile Status</p>
+      <h2>Loading tailor profile...</h2>
+      <p>We are reading the tailor ID from the URL and requesting live data from Xano.</p>
+    </aside>
+  </section>
+
+  <section class="tailor-detail-section" aria-labelledby="tailor-detail-title">
+    <article class="feature-card tailor-detail-card" id="tailor-detail-card">
+      <span class="panel-label">Tailor Record</span>
+      <h2 id="tailor-detail-title">Preparing profile details</h2>
+      <p>Please wait while the page loads this tailor from the App API group.</p>
+    </article>
+  </section>
+
+  <section class="feature-grid" aria-label="Tailor detail highlights">
+    ${page.highlights
+      .map(
+        (item) => `
+          <article class="feature-card">
+            <h2>${item.title}</h2>
+            <p>${item.text}</p>
+          </article>
+        `,
+      )
+      .join('')}
+  </section>
+`;
+
 contentRoot.innerHTML =
   pageKey === 'login'
     ? renderLoginPage()
@@ -473,6 +529,8 @@ contentRoot.innerHTML =
         ? renderDashboardShell()
         : pageKey === 'tailors'
           ? renderTailorsShell()
+          : pageKey === 'tailor-detail'
+            ? renderTailorDetailShell()
           : renderStandardPage();
 
 if (pageKey === 'login') {
@@ -1559,8 +1617,10 @@ if (pageKey === 'tailors') {
     const bio =
       getFirstFilledValue(tailor, ['bio', 'about', 'description']) ||
       'This tailor was loaded from the live directory. Add more profile fields in Xano to show more detail here.';
+    const tailorId = getFirstFilledValue(tailor, ['id', 'tailor_id', 'tailorId']);
 
     return {
+      tailorId,
       name,
       specialty,
       location,
@@ -1586,6 +1646,7 @@ if (pageKey === 'tailors') {
 
   const renderTailorCard = (tailor, index) => {
     const cardData = mapTailorToCardData(tailor, index);
+    const detailHref = cardData.tailorId ? `tailor-detail.html?tailorId=${encodeURIComponent(cardData.tailorId)}` : '';
 
     return `
       <article class="feature-card tailor-card">
@@ -1599,6 +1660,11 @@ if (pageKey === 'tailors') {
           ${renderTailorMetaItem('Phone', cardData.phone)}
           ${renderTailorMetaItem('Email', cardData.email)}
         </ul>
+        ${
+          detailHref
+            ? `<a class="button button-secondary tailor-card-link" href="${detailHref}">View full profile</a>`
+            : '<p class="tailor-card-link-note">This record is missing an ID, so a detail link is not available yet.</p>'
+        }
       </article>
     `;
   };
@@ -1686,6 +1752,182 @@ if (pageKey === 'tailors') {
         listingText: 'The listing area stays visible so visitors understand why no tailor cards are showing.',
         stateClass: 'is-error',
         tailors: [],
+      });
+    }
+  })();
+}
+
+if (pageKey === 'tailor-detail') {
+  const detailStatusPanel = document.querySelector('#tailor-detail-status-panel');
+  const detailCard = document.querySelector('#tailor-detail-card');
+  const apiHelpers = window.TailorMarketplaceApi;
+
+  // Look through common field names and return the first readable value.
+  // This keeps the page flexible across small schema differences.
+  const getFirstFilledValue = (record, fieldNames) => {
+    for (const fieldName of fieldNames) {
+      const value = record && record[fieldName];
+
+      if (value === 0) {
+        return '0';
+      }
+
+      if (typeof value === 'string' && value.trim()) {
+        return value.trim();
+      }
+
+      if (typeof value === 'number' || typeof value === 'boolean') {
+        return String(value);
+      }
+    }
+
+    return '';
+  };
+
+  // Read the tailor ID from the URL in two beginner-friendly steps:
+  // 1) Query string support: ?tailorId=123 or ?id=123
+  // 2) Path segment support: /tailor-detail.html/123
+  const getTailorIdFromUrl = () => {
+    const queryParams = new URLSearchParams(window.location.search);
+    const queryTailorId = queryParams.get('tailorId') || queryParams.get('id');
+
+    if (queryTailorId && queryTailorId.trim()) {
+      return queryTailorId.trim();
+    }
+
+    const pathParts = window.location.pathname.split('/').filter(Boolean);
+    const lastPart = pathParts[pathParts.length - 1] || '';
+
+    if (lastPart.includes('.html')) {
+      return '';
+    }
+
+    return decodeURIComponent(lastPart).trim();
+  };
+
+  const renderMetaRow = (label, value) => {
+    if (!value) {
+      return '';
+    }
+
+    return `
+      <div>
+        <dt>${escapeHtml(label)}</dt>
+        <dd>${escapeHtml(value)}</dd>
+      </div>
+    `;
+  };
+
+  const updateDetailState = ({ title, description, cardTitle, cardBody, stateClass }) => {
+    detailStatusPanel.className = `hero-panel tailor-detail-status-panel ${stateClass}`.trim();
+    detailStatusPanel.innerHTML = `
+      <p class="panel-label">Profile Status</p>
+      <h2>${escapeHtml(title)}</h2>
+      <p>${escapeHtml(description)}</p>
+    `;
+
+    detailCard.className = `feature-card tailor-detail-card ${stateClass}`.trim();
+    detailCard.innerHTML = `
+      <span class="panel-label">Tailor Record</span>
+      <h2 id="tailor-detail-title">${escapeHtml(cardTitle)}</h2>
+      ${cardBody}
+    `;
+  };
+
+  const renderTailorDetail = (tailorData) => {
+    const name = getFirstFilledValue(tailorData, ['business_name', 'shop_name', 'name', 'full_name', 'fullName']) || 'Tailor profile';
+    const specialty =
+      getFirstFilledValue(tailorData, ['specialty', 'speciality', 'service_type', 'category', 'focus']) || 'General tailoring services';
+    const location = getFirstFilledValue(tailorData, ['location', 'city', 'address', 'region']);
+    const experience = getFirstFilledValue(tailorData, ['experience', 'years_experience', 'yearsExperience']);
+    const phone = getFirstFilledValue(tailorData, ['phone', 'phone_number', 'phoneNumber']);
+    const email = getFirstFilledValue(tailorData, ['email', 'contact_email', 'contactEmail']);
+    const bio =
+      getFirstFilledValue(tailorData, ['bio', 'about', 'description']) ||
+      'This profile was loaded from live Xano data. Add more fields in Xano to show a richer detail page.';
+    const profileId = getFirstFilledValue(tailorData, ['id', 'tailor_id', 'tailorId']);
+
+    const metaRows = `
+      ${renderMetaRow('Tailor ID', profileId)}
+      ${renderMetaRow('Specialty', specialty)}
+      ${renderMetaRow('Location', location)}
+      ${renderMetaRow('Experience', experience)}
+      ${renderMetaRow('Phone', phone)}
+      ${renderMetaRow('Email', email)}
+    `;
+
+    return {
+      name,
+      body: `
+        <p class="tailor-detail-bio">${escapeHtml(bio)}</p>
+        <dl class="tailor-detail-meta">${metaRows || '<div><dt>Info</dt><dd>No extra profile fields were returned.</dd></div>'}</dl>
+      `,
+    };
+  };
+
+  (async () => {
+    const tailorId = getTailorIdFromUrl();
+
+    if (!tailorId) {
+      updateDetailState({
+        title: 'Tailor ID is missing.',
+        description: 'Open this page with a tailor ID in the URL, for example ?tailorId=1.',
+        cardTitle: 'No tailor ID was found',
+        cardBody: '<p>This page needs a tailor ID in the URL before it can request a profile.</p>',
+        stateClass: 'is-empty',
+      });
+      return;
+    }
+
+    updateDetailState({
+      title: 'Loading tailor profile...',
+      description: `Requesting tailor ID ${tailorId} from Xano with getTailorById().`,
+      cardTitle: 'Loading profile details',
+      cardBody: '<p>Please wait while this tailor record is being loaded.</p>',
+      stateClass: 'is-loading',
+    });
+
+    try {
+      const result = await apiHelpers.getTailorById(tailorId);
+      const tailorData = result && result.data;
+
+      if (!result.ok) {
+        updateDetailState({
+          title: 'We could not load this tailor profile.',
+          description: result.errorMessage || 'The tailor detail request returned an error response.',
+          cardTitle: 'Tailor data is unavailable',
+          cardBody: '<p>Please go back to the directory and try opening this profile again.</p>',
+          stateClass: 'is-error',
+        });
+        return;
+      }
+
+      if (!tailorData || (typeof tailorData === 'object' && !Object.keys(tailorData).length)) {
+        updateDetailState({
+          title: 'No detail record was returned.',
+          description: 'The request worked, but this tailor ID did not return profile data.',
+          cardTitle: 'Tailor not found',
+          cardBody: '<p>Try opening another profile from the Tailors listing page.</p>',
+          stateClass: 'is-empty',
+        });
+        return;
+      }
+
+      const detailView = renderTailorDetail(tailorData);
+      updateDetailState({
+        title: 'Tailor profile loaded successfully.',
+        description: 'This page is now showing live data from the App API group.',
+        cardTitle: detailView.name,
+        cardBody: detailView.body,
+        stateClass: 'is-success',
+      });
+    } catch (error) {
+      updateDetailState({
+        title: 'Network error while loading tailor profile.',
+        description: 'We could not reach Xano right now. Please check your connection and try again.',
+        cardTitle: 'Request could not finish',
+        cardBody: '<p>The detail page keeps this message visible so the issue is clear to visitors.</p>',
+        stateClass: 'is-error',
       });
     }
   })();
