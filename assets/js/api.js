@@ -30,6 +30,7 @@ const API_ENDPOINTS = {
   app: {
     tailors: '/tailor',
     bookings: '/bookings',
+    createBooking: '/create_booking',
     reviews: '/reviews',
   },
   users: {
@@ -265,6 +266,25 @@ const getTailors = () => getRequest('app', API_ENDPOINTS.app.tailors);
 const getTailorById = (tailorId) => getRequest('app', `${API_ENDPOINTS.app.tailors}/${tailorId}`);
 const getAppBookings = () => authenticatedRequest('app', API_ENDPOINTS.app.bookings, { method: 'GET' });
 const getAppReviews = () => authenticatedRequest('app', API_ENDPOINTS.app.reviews, { method: 'GET' });
+/*
+  Create a booking through the authenticated App API endpoint.
+
+  Why this helper uses FormData:
+  - The inspiration image input is a file upload.
+  - FormData lets us send text fields and file fields in one request.
+  - The shared apiRequest() helper automatically avoids setting Content-Type
+    for FormData, so the browser can set the proper multipart boundary.
+
+  Required payload fields:
+  - tailor_id
+  - service_requested
+  - measurements
+  - inspiration_image_upload (optional file from the form)
+*/
+const createBooking = (bookingFormData) => authenticatedRequest('app', API_ENDPOINTS.app.createBooking, {
+  method: 'POST',
+  body: bookingFormData,
+});
 const createTailor = (tailorData) => authenticatedRequest('app', API_ENDPOINTS.app.tailors, {
   method: 'POST',
   body: JSON.stringify(tailorData),
@@ -316,6 +336,7 @@ window.TailorMarketplaceApi = {
   getTailorById,
   getAppBookings,
   getAppReviews,
+  createBooking,
   createTailor,
   updateTailor,
   deleteTailor,
