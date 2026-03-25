@@ -75,7 +75,9 @@ const pageContent = {
       { title: 'Responsive catalog', text: 'Directory content can expand into multiple columns on large screens.' },
     ],
   },
-  tailorDetail: {
+  // Keep this key exactly aligned with data-page="tailor-detail" in
+  // pages/tailor-detail.html so this page can render and run its API request.
+  'tailor-detail': {
     heroEyebrow: 'Tailor Profile',
     heroTitle: 'View a tailor profile loaded from live Xano data.',
     heroText:
