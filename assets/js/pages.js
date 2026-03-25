@@ -573,6 +573,57 @@ const renderBookingsShell = () => `
     </article>
   </section>
 
+  <section class="bookings-form-section" aria-labelledby="bookings-form-title">
+    <article class="feature-card bookings-form-card">
+      <span class="panel-label">Create Booking</span>
+      <h2 id="bookings-form-title">Send a booking request</h2>
+      <p class="bookings-form-intro">
+        Fill out the form below to send your request to the live authenticated Xano booking endpoint.
+      </p>
+
+      <form class="login-form bookings-form" id="bookings-form" novalidate>
+        <div class="form-field">
+          <label for="booking-service-requested">Service requested</label>
+          <input
+            id="booking-service-requested"
+            name="serviceRequested"
+            type="text"
+            placeholder="Example: Wedding suit fitting and alterations"
+            required
+          />
+        </div>
+
+        <div class="form-field">
+          <label for="booking-measurements">Measurements</label>
+          <textarea
+            id="booking-measurements"
+            name="measurements"
+            placeholder="Share your size details, notes, or fitting preferences."
+            required
+          ></textarea>
+        </div>
+
+        <div class="form-field">
+          <label for="booking-inspiration-image">Inspiration image upload</label>
+          <input
+            id="booking-inspiration-image"
+            name="inspirationImageUpload"
+            type="file"
+            accept="image/*"
+          />
+        </div>
+
+        <p class="validation-message" id="bookings-form-message" aria-live="polite">
+          Please select a tailor from the directory, then submit your booking request.
+        </p>
+
+        <button class="button button-primary login-submit" id="bookings-submit-button" type="submit">
+          Submit booking request
+        </button>
+      </form>
+    </article>
+  </section>
+
   <section class="feature-grid" aria-label="Bookings page highlights">
     ${page.highlights
       .map(
@@ -2106,13 +2157,90 @@ if (pageKey === 'tailor-detail') {
 if (pageKey === 'bookings') {
   const bookingsStatusPanel = document.querySelector('#bookings-status-panel');
   const bookingsContextCard = document.querySelector('#bookings-context-card');
+  const bookingsForm = document.querySelector('#bookings-form');
+  const bookingsMessage = document.querySelector('#bookings-form-message');
+  const bookingsSubmitButton = document.querySelector('#bookings-submit-button');
   const apiHelpers = window.TailorMarketplaceApi;
+  let selectedTailorId = '';
 
   const getTailorIdFromQuery = () => {
     const queryParams = new URLSearchParams(window.location.search);
     const queryTailorId = queryParams.get('tailorId');
     return queryTailorId && queryTailorId.trim() ? queryTailorId.trim() : '';
   };
+
+  // Keep all booking form message updates in one helper so loading, success,
+  // and error states are easy for beginners to follow.
+  const updateBookingsFormMessage = (message, stateClass = '') => {
+    bookingsMessage.textContent = message;
+    bookingsMessage.className = `validation-message ${stateClass}`.trim();
+  };
+
+  // Build FormData for the create_booking endpoint.
+  // This keeps file upload logic in one place and avoids repeating field names.
+  const createBookingFormData = ({ tailorId, serviceRequested, measurements, inspirationImageFile }) => {
+    const bookingFormData = new FormData();
+    bookingFormData.append('tailor_id', String(tailorId));
+    bookingFormData.append('service_requested', serviceRequested);
+    bookingFormData.append('measurements', measurements);
+
+    if (inspirationImageFile) {
+      bookingFormData.append('inspiration_image_upload', inspirationImageFile);
+    }
+
+    return bookingFormData;
+  };
+
+  bookingsForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+
+    const serviceRequestedInput = document.querySelector('#booking-service-requested');
+    const measurementsInput = document.querySelector('#booking-measurements');
+    const inspirationImageInput = document.querySelector('#booking-inspiration-image');
+
+    const serviceRequested = serviceRequestedInput.value.trim();
+    const measurements = measurementsInput.value.trim();
+    const inspirationImageFile = inspirationImageInput.files && inspirationImageInput.files[0] ? inspirationImageInput.files[0] : null;
+
+    if (!selectedTailorId) {
+      updateBookingsFormMessage(
+        'Please open this page from a tailor profile (for example: bookings.html?tailorId=1) so we can send tailor_id.',
+        'is-error',
+      );
+      return;
+    }
+
+    if (!serviceRequested || !measurements) {
+      updateBookingsFormMessage('Please complete both service requested and measurements before submitting.', 'is-error');
+      return;
+    }
+
+    updateBookingsFormMessage('Submitting your booking request to Xano... Please wait.');
+    bookingsSubmitButton.disabled = true;
+
+    try {
+      const bookingFormData = createBookingFormData({
+        tailorId: selectedTailorId,
+        serviceRequested,
+        measurements,
+        inspirationImageFile,
+      });
+
+      const result = await apiHelpers.createBooking(bookingFormData);
+
+      if (!result.ok) {
+        updateBookingsFormMessage(result.errorMessage || 'Booking request failed. Please try again.', 'is-error');
+        return;
+      }
+
+      updateBookingsFormMessage('Booking request submitted successfully.', 'is-success');
+      bookingsForm.reset();
+    } catch (error) {
+      updateBookingsFormMessage('We could not reach the booking service right now. Please try again.', 'is-error');
+    } finally {
+      bookingsSubmitButton.disabled = false;
+    }
+  });
 
   const updateBookingsState = ({ title, description, cardTitle, cardBody, stateClass = '' }) => {
     bookingsStatusPanel.className = `hero-panel bookings-status-panel ${stateClass}`.trim();
@@ -2134,6 +2262,7 @@ if (pageKey === 'bookings') {
     const tailorId = getTailorIdFromQuery();
 
     if (!tailorId) {
+      selectedTailorId = '';
       updateBookingsState({
         title: 'Generic booking view',
         description: 'No tailor ID was found in the URL query string, so this page is showing a safe default view.',
@@ -2141,6 +2270,10 @@ if (pageKey === 'bookings') {
         cardBody: '<p>You can still continue browsing and return here later from any tailor profile.</p>',
         stateClass: 'is-empty',
       });
+      updateBookingsFormMessage(
+        'A tailor selection is required before submitting. Open bookings from a tailor profile first.',
+        'is-error',
+      );
       return;
     }
 
@@ -2181,6 +2314,7 @@ if (pageKey === 'bookings') {
       const businessName = getFirstFilledValue(tailorData, ['business_name', 'shop_name', 'name']) || 'Tailor profile';
       const location = getFirstFilledValue(tailorData, ['location', 'city', 'address']) || 'Location not listed';
       const bio = getFirstFilledValue(tailorData, ['bio', 'about', 'description']) || 'No profile summary is available yet.';
+      selectedTailorId = tailorId;
 
       updateBookingsState({
         title: 'Tailor context is ready',
@@ -2201,7 +2335,9 @@ if (pageKey === 'bookings') {
         `,
         stateClass: 'is-success',
       });
+      updateBookingsFormMessage(`Tailor ID ${tailorId} is selected. You can now submit this booking form.`);
     } catch (error) {
+      selectedTailorId = '';
       updateBookingsState({
         title: 'Network error while loading booking context.',
         description: 'We could not reach Xano right now. Please check your connection and try again.',
@@ -2209,6 +2345,10 @@ if (pageKey === 'bookings') {
         cardBody: '<p>The booking page stays usable, but this tailor context could not be prepared.</p>',
         stateClass: 'is-error',
       });
+      updateBookingsFormMessage(
+        'The selected tailor could not be loaded, so submission is blocked until tailor context is available.',
+        'is-error',
+      );
     }
   })();
 }
