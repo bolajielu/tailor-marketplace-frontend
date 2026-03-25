@@ -139,6 +139,28 @@ const escapeHtml = (value) => {
     .replaceAll("'", '&#39;');
 };
 
+// Shared helper used by multiple page sections to read the first non-empty
+// value from possible field names without repeating the same logic.
+const getFirstFilledValue = (record, fieldNames) => {
+  for (const fieldName of fieldNames) {
+    const value = record && record[fieldName];
+
+    if (value === 0) {
+      return '0';
+    }
+
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim();
+    }
+
+    if (typeof value === 'number' || typeof value === 'boolean') {
+      return String(value);
+    }
+  }
+
+  return '';
+};
+
 // Read the most helpful display name that exists in the current user object.
 // Xano responses can vary, so this helper checks a few common field names.
 const getUserDisplayName = (userData) => {
@@ -1629,28 +1651,6 @@ if (pageKey === 'tailors') {
       .replaceAll("'", '&#39;');
   };
 
-  // Look through a few possible field names because Xano table columns can
-  // vary between projects and environments.
-  const getFirstFilledValue = (record, fieldNames) => {
-    for (const fieldName of fieldNames) {
-      const value = record && record[fieldName];
-
-      if (value === 0) {
-        return '0';
-      }
-
-      if (typeof value === 'string' && value.trim()) {
-        return value.trim();
-      }
-
-      if (typeof value === 'number' || typeof value === 'boolean') {
-        return String(value);
-      }
-    }
-
-    return '';
-  };
-
   // Keep the card display beginner-friendly by mapping common tailor fields
   // into one consistent object the UI can render.
   const mapTailorToCardData = (tailor, index) => {
@@ -1808,28 +1808,6 @@ if (pageKey === 'tailor-detail') {
   const detailStatusPanel = document.querySelector('#tailor-detail-status-panel');
   const detailCard = document.querySelector('#tailor-detail-card');
   const apiHelpers = window.TailorMarketplaceApi;
-
-  // Look through common field names and return the first readable value.
-  // This keeps the page flexible across small schema differences.
-  const getFirstFilledValue = (record, fieldNames) => {
-    for (const fieldName of fieldNames) {
-      const value = record && record[fieldName];
-
-      if (value === 0) {
-        return '0';
-      }
-
-      if (typeof value === 'string' && value.trim()) {
-        return value.trim();
-      }
-
-      if (typeof value === 'number' || typeof value === 'boolean') {
-        return String(value);
-      }
-    }
-
-    return '';
-  };
 
   // Read the tailor ID from the URL in two beginner-friendly steps:
   // 1) Query string support: ?tailorId=123 or ?id=123
@@ -2134,26 +2112,6 @@ if (pageKey === 'bookings') {
     const queryParams = new URLSearchParams(window.location.search);
     const queryTailorId = queryParams.get('tailorId');
     return queryTailorId && queryTailorId.trim() ? queryTailorId.trim() : '';
-  };
-
-  const getFirstFilledValue = (record, fieldNames) => {
-    for (const fieldName of fieldNames) {
-      const value = record && record[fieldName];
-
-      if (value === 0) {
-        return '0';
-      }
-
-      if (typeof value === 'string' && value.trim()) {
-        return value.trim();
-      }
-
-      if (typeof value === 'number' || typeof value === 'boolean') {
-        return String(value);
-      }
-    }
-
-    return '';
   };
 
   const updateBookingsState = ({ title, description, cardTitle, cardBody, stateClass = '' }) => {
