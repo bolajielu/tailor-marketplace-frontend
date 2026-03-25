@@ -1836,33 +1836,167 @@ if (pageKey === 'tailor-detail') {
     `;
   };
 
-  const renderTailorDetail = (tailorData) => {
-    const name = getFirstFilledValue(tailorData, ['business_name', 'shop_name', 'name', 'full_name', 'fullName']) || 'Tailor profile';
-    const specialty =
-      getFirstFilledValue(tailorData, ['specialty', 'speciality', 'service_type', 'category', 'focus']) || 'General tailoring services';
-    const location = getFirstFilledValue(tailorData, ['location', 'city', 'address', 'region']);
-    const experience = getFirstFilledValue(tailorData, ['experience', 'years_experience', 'yearsExperience']);
-    const phone = getFirstFilledValue(tailorData, ['phone', 'phone_number', 'phoneNumber']);
-    const email = getFirstFilledValue(tailorData, ['email', 'contact_email', 'contactEmail']);
-    const bio =
-      getFirstFilledValue(tailorData, ['bio', 'about', 'description']) ||
-      'This profile was loaded from live Xano data. Add more fields in Xano to show a richer detail page.';
-    const profileId = getFirstFilledValue(tailorData, ['id', 'tailor_id', 'tailorId']);
+  // Return a safe image URL string or an empty string when the value cannot be
+  // used in an <img> element. This helps prevent broken or unsafe links.
+  const getSafeImageUrl = (value) => {
+    if (typeof value !== 'string' || !value.trim()) {
+      return '';
+    }
 
-    const metaRows = `
-      ${renderMetaRow('Tailor ID', profileId)}
-      ${renderMetaRow('Specialty', specialty)}
-      ${renderMetaRow('Location', location)}
-      ${renderMetaRow('Experience', experience)}
-      ${renderMetaRow('Phone', phone)}
-      ${renderMetaRow('Email', email)}
+    try {
+      const parsedUrl = new URL(value.trim(), window.location.origin);
+
+      if (parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:') {
+        return parsedUrl.href;
+      }
+    } catch (error) {
+      return '';
+    }
+
+    return '';
+  };
+
+  // Read an array field safely. If Xano sends a non-array value, return [] so
+  // the UI can still render without crashing.
+  const getArrayField = (record, fieldName) => {
+    const value = record && record[fieldName];
+    return Array.isArray(value) ? value : [];
+  };
+
+  const renderServicesList = (services) => {
+    if (!services.length) {
+      return '<p class="tailor-detail-empty-text">No services listed yet.</p>';
+    }
+
+    const serviceItems = services
+      .map((serviceItem) => {
+        if (typeof serviceItem !== 'string' || !serviceItem.trim()) {
+          return '';
+        }
+
+        return `<li class="tailor-detail-tag">${escapeHtml(serviceItem.trim())}</li>`;
+      })
+      .filter(Boolean)
+      .join('');
+
+    return serviceItems
+      ? `<ul class="tailor-detail-tag-list">${serviceItems}</ul>`
+      : '<p class="tailor-detail-empty-text">No services listed yet.</p>';
+  };
+
+  const renderPortfolioGallery = (portfolioImages, businessName) => {
+    const validImageUrls = portfolioImages
+      .map((imageItem) => {
+        if (typeof imageItem === 'string') {
+          return getSafeImageUrl(imageItem);
+        }
+
+        if (imageItem && typeof imageItem === 'object') {
+          return getSafeImageUrl(imageItem.url || imageItem.image || imageItem.src);
+        }
+
+        return '';
+      })
+      .filter(Boolean);
+
+    if (!validImageUrls.length) {
+      return '<p class="tailor-detail-empty-text">No portfolio images yet.</p>';
+    }
+
+    return `
+      <div class="tailor-portfolio-grid">
+        ${validImageUrls
+          .map(
+            (imageUrl, index) => `
+              <img
+                class="tailor-portfolio-image"
+                src="${escapeHtml(imageUrl)}"
+                alt="${escapeHtml(`${businessName} portfolio image ${index + 1}`)}"
+                loading="lazy"
+              />
+            `,
+          )
+          .join('')}
+      </div>
     `;
+  };
+
+  const renderTailorDetail = (tailorData) => {
+    // Align this page with the real tailor table schema from Xano.
+    const businessName = getFirstFilledValue(tailorData, ['business_name']) || 'Tailor profile';
+    const location = getFirstFilledValue(tailorData, ['location']) || 'Location not added yet';
+    const bio = getFirstFilledValue(tailorData, ['bio']) || 'No bio has been added yet.';
+    const priceRange = getFirstFilledValue(tailorData, ['price_range']) || 'Price range not listed';
+    const turnaroundTime = getFirstFilledValue(tailorData, ['turnaround_time']) || 'Turnaround time not listed';
+    const whatsappLinkRaw = getFirstFilledValue(tailorData, ['whatsapp_link']);
+    const profileImageUrl = getSafeImageUrl(getFirstFilledValue(tailorData, ['profile_picture']));
+    const servicesOffered = getArrayField(tailorData, 'services_offered');
+    const portfolioImages = getArrayField(tailorData, 'portfolio_images');
+    const whatsappLink = getSafeImageUrl(whatsappLinkRaw);
+
+    const profileImageMarkup = profileImageUrl
+      ? `
+        <img
+          class="tailor-profile-image"
+          src="${escapeHtml(profileImageUrl)}"
+          alt="${escapeHtml(`${businessName} profile picture`)}"
+        />
+      `
+      : '<div class="tailor-profile-placeholder">No profile image yet</div>';
+
+    const contactMarkup = whatsappLink
+      ? `
+        <a
+          class="button button-primary tailor-whatsapp-link"
+          href="${escapeHtml(whatsappLink)}"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Contact on WhatsApp
+        </a>
+      `
+      : '<p class="tailor-detail-empty-text">WhatsApp link not added yet.</p>';
 
     return {
-      name,
+      name: businessName,
       body: `
-        <p class="tailor-detail-bio">${escapeHtml(bio)}</p>
-        <dl class="tailor-detail-meta">${metaRows || '<div><dt>Info</dt><dd>No extra profile fields were returned.</dd></div>'}</dl>
+        <section class="tailor-detail-group tailor-profile-group" aria-label="Profile">
+          <div class="tailor-profile-image-wrap">
+            ${profileImageMarkup}
+          </div>
+          <div class="tailor-profile-info">
+            <h3>${escapeHtml(businessName)}</h3>
+            <p class="tailor-detail-location">${escapeHtml(location)}</p>
+          </div>
+        </section>
+
+        <section class="tailor-detail-group" aria-label="About">
+          <h3>About</h3>
+          <p class="tailor-detail-bio">${escapeHtml(bio)}</p>
+        </section>
+
+        <section class="tailor-detail-group" aria-label="Services">
+          <h3>Services</h3>
+          ${renderServicesList(servicesOffered)}
+        </section>
+
+        <section class="tailor-detail-group" aria-label="Pricing and turnaround">
+          <h3>Pricing &amp; Turnaround</h3>
+          <dl class="tailor-detail-meta">
+            ${renderMetaRow('Price range', priceRange)}
+            ${renderMetaRow('Turnaround time', turnaroundTime)}
+          </dl>
+        </section>
+
+        <section class="tailor-detail-group" aria-label="Contact">
+          <h3>Contact</h3>
+          ${contactMarkup}
+        </section>
+
+        <section class="tailor-detail-group" aria-label="Portfolio">
+          <h3>Portfolio</h3>
+          ${renderPortfolioGallery(portfolioImages, businessName)}
+        </section>
       `,
     };
   };
