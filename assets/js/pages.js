@@ -1837,14 +1837,32 @@ if (pageKey === 'tailor-detail') {
   };
 
   // Return a safe image URL string or an empty string when the value cannot be
-  // used in an <img> element. This helps prevent broken or unsafe links.
+  // used in an <img> element. Xano image fields may return a string URL or an
+  // object, so this helper reads both formats in one easy-to-follow place.
   const getSafeImageUrl = (value) => {
-    if (typeof value !== 'string' || !value.trim()) {
+    let possibleUrl = '';
+
+    // Handle direct string URLs such as "https://...".
+    if (typeof value === 'string') {
+      possibleUrl = value.trim();
+    }
+
+    // Handle common Xano image object shapes such as:
+    // { url: "..." }, { image: "..." }, { src: "..." }, or { path: "..." }.
+    if (!possibleUrl && value && typeof value === 'object') {
+      const objectUrlValue = value.url || value.image || value.src || value.path || '';
+
+      if (typeof objectUrlValue === 'string') {
+        possibleUrl = objectUrlValue.trim();
+      }
+    }
+
+    if (!possibleUrl) {
       return '';
     }
 
     try {
-      const parsedUrl = new URL(value.trim(), window.location.origin);
+      const parsedUrl = new URL(possibleUrl, window.location.origin);
 
       if (parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:') {
         return parsedUrl.href;
@@ -1886,17 +1904,7 @@ if (pageKey === 'tailor-detail') {
 
   const renderPortfolioGallery = (portfolioImages, businessName) => {
     const validImageUrls = portfolioImages
-      .map((imageItem) => {
-        if (typeof imageItem === 'string') {
-          return getSafeImageUrl(imageItem);
-        }
-
-        if (imageItem && typeof imageItem === 'object') {
-          return getSafeImageUrl(imageItem.url || imageItem.image || imageItem.src);
-        }
-
-        return '';
-      })
+      .map((imageItem) => getSafeImageUrl(imageItem))
       .filter(Boolean);
 
     if (!validImageUrls.length) {
@@ -1929,7 +1937,7 @@ if (pageKey === 'tailor-detail') {
     const priceRange = getFirstFilledValue(tailorData, ['price_range']) || 'Price range not listed';
     const turnaroundTime = getFirstFilledValue(tailorData, ['turnaround_time']) || 'Turnaround time not listed';
     const whatsappLinkRaw = getFirstFilledValue(tailorData, ['whatsapp_link']);
-    const profileImageUrl = getSafeImageUrl(getFirstFilledValue(tailorData, ['profile_picture']));
+    const profileImageUrl = getSafeImageUrl(tailorData && tailorData.profile_picture);
     const servicesOffered = getArrayField(tailorData, 'services_offered');
     const portfolioImages = getArrayField(tailorData, 'portfolio_images');
     const whatsappLink = getSafeImageUrl(whatsappLinkRaw);
