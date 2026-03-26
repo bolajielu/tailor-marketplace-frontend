@@ -1181,6 +1181,14 @@ if (pageKey === 'dashboard') {
           { label: 'View reviews', href: 'reviews.html' },
         ],
       },
+      {
+        label: 'Tailor Bookings',
+        title: 'Loading your assigned bookings',
+        text: 'We are preparing a real bookings list that only includes records linked to your tailor profile.',
+        stateClass: 'is-loading',
+        body: '<p class="dashboard-section-note">Please wait while your booking records are requested and matched.</p>',
+        links: [{ label: 'Open bookings page', href: 'bookings.html' }],
+      },
     ];
   };
 
@@ -1228,6 +1236,78 @@ if (pageKey === 'dashboard') {
       ? (matchingBookings.length || matchingReviews.length ? 'is-success' : 'is-empty')
       : 'is-error';
 
+    // Build a dedicated bookings card for tailor users.
+    // This section keeps clear loading/empty/success/error behavior and is
+    // ready for a future GET /get_booking?booking_id=<id> detail flow.
+    const tailorBookingsStateClass = !bookingsResult.ok
+      ? 'is-error'
+      : matchingBookings.length
+        ? 'is-success'
+        : 'is-empty';
+
+    const tailorBookingsText = !bookingsResult.ok
+      ? bookingsResult.errorMessage || 'We could not load tailor bookings right now.'
+      : matchingBookings.length
+        ? 'These bookings were loaded from the App API group and matched to your tailor profile.'
+        : 'The bookings request worked, but no records are linked to this tailor profile yet.';
+
+    const tailorBookingsBody = !bookingsResult.ok
+      ? '<p class="dashboard-section-note">Try refreshing this page or signing in again if your session expired.</p>'
+      : matchingBookings.length
+        ? `
+          <div class="dashboard-bookings-list">
+            ${matchingBookings
+              .slice(0, 6)
+              .map((bookingItem) => {
+                const bookingId = getFirstMatchingValue(bookingItem, ['booking_id', 'id', 'bookingId']) || 'N/A';
+                const serviceRequested = getFirstMatchingValue(bookingItem, ['service_requested', 'service_name', 'service', 'title']) || 'Service not provided';
+                const bookingStatus = getFirstMatchingValue(bookingItem, ['status', 'booking_status', 'state']) || 'Pending update';
+                const customerName = getFirstMatchingValue(bookingItem, ['customer_name', 'customer', 'name']) || 'Customer not listed';
+                const bookingDate = getFirstMatchingValue(bookingItem, ['appointment_date', 'date', 'booking_date', 'created_at']) || 'Date not available';
+
+                return `
+                  <article
+                    class="dashboard-record-item dashboard-booking-item"
+                    data-booking-id="${escapeHtml(bookingId)}"
+                    data-booking-detail-endpoint="/get_booking"
+                  >
+                    <h4>Booking #${escapeHtml(bookingId)}</h4>
+                    <dl>
+                      <div>
+                        <dt>Service</dt>
+                        <dd>${escapeHtml(serviceRequested)}</dd>
+                      </div>
+                      <div>
+                        <dt>Status</dt>
+                        <dd>${escapeHtml(bookingStatus)}</dd>
+                      </div>
+                      <div>
+                        <dt>Customer</dt>
+                        <dd>${escapeHtml(customerName)}</dd>
+                      </div>
+                      <div>
+                        <dt>Date</dt>
+                        <dd>${escapeHtml(bookingDate)}</dd>
+                      </div>
+                    </dl>
+                    <div class="dashboard-role-actions">
+                      <button
+                        type="button"
+                        class="button button-secondary dashboard-role-link dashboard-booking-detail-button"
+                        data-booking-id="${escapeHtml(bookingId)}"
+                        data-booking-detail-endpoint="/get_booking"
+                      >
+                        View booking details
+                      </button>
+                    </div>
+                  </article>
+                `;
+              })
+              .join('')}
+          </div>
+        `
+        : '<p class="dashboard-section-empty">When a booking is assigned to this tailor, it will appear here.</p>';
+
     return [
       {
         label: 'Tailor Profile',
@@ -1269,16 +1349,6 @@ if (pageKey === 'dashboard') {
                 value: getFirstMatchingValue(matchingReviews[0], ['rating', 'stars', 'score']) || 'Not available yet',
               },
             ])}
-            ${renderCustomerRecordList(matchingBookings.slice(0, 2), {
-              emptyText: 'When a booking is linked to this tailor, it will appear here.',
-              itemTitle: (item, index) =>
-                getFirstMatchingValue(item, ['service_name', 'service', 'title', 'customer_name']) || `Booking ${index + 1}`,
-              detailRows: (item) => [
-                { label: 'Status', value: getFirstMatchingValue(item, ['status', 'booking_status', 'state']) || 'Pending update' },
-                { label: 'Date', value: getFirstMatchingValue(item, ['appointment_date', 'date', 'booking_date', 'created_at']) || 'Date not available' },
-                { label: 'Customer', value: getFirstMatchingValue(item, ['customer_name', 'customer', 'name']) || 'Customer not listed' },
-              ],
-            })}
             ${renderCustomerRecordList(matchingReviews.slice(0, 2), {
               emptyText: 'When a review is linked to this tailor, it will appear here.',
               itemTitle: (item, index) =>
@@ -1294,6 +1364,18 @@ if (pageKey === 'dashboard') {
           { label: 'Open bookings', href: 'bookings.html' },
           { label: 'View reviews', href: 'reviews.html' },
         ],
+      },
+      {
+        label: 'Tailor Bookings',
+        title: !bookingsResult.ok
+          ? 'Bookings could not be loaded'
+          : matchingBookings.length
+            ? `You have ${formatDashboardCount(matchingBookings, 'assigned booking', 'assigned bookings')}`
+            : 'No assigned bookings yet',
+        text: tailorBookingsText,
+        stateClass: tailorBookingsStateClass,
+        body: tailorBookingsBody,
+        links: [{ label: 'Open bookings page', href: 'bookings.html' }],
       },
     ];
   };

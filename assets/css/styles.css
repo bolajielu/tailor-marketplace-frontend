@@ -514,6 +514,11 @@ button {
   gap: 0.85rem;
 }
 
+.dashboard-bookings-list {
+  display: grid;
+  gap: 0.85rem;
+}
+
 .dashboard-record-item {
   padding: 1rem;
   border: 1px solid var(--border);
