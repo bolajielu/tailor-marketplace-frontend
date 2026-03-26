@@ -573,8 +573,8 @@ const renderBookingsShell = () => `
     </article>
   </section>
 
-  <section class="bookings-form-section" aria-labelledby="bookings-form-title">
-    <article class="feature-card bookings-form-card">
+  <section class="bookings-main-grid" aria-label="Create booking and view your booking history">
+    <article class="feature-card bookings-form-card bookings-form-section" aria-labelledby="bookings-form-title">
       <span class="panel-label">Create Booking</span>
       <h2 id="bookings-form-title">Send a booking request</h2>
       <p class="bookings-form-intro">
@@ -621,6 +621,18 @@ const renderBookingsShell = () => `
           Submit booking request
         </button>
       </form>
+    </article>
+
+    <article class="feature-card bookings-list-card bookings-list-section" aria-labelledby="bookings-list-title">
+      <span class="panel-label">My Booking History</span>
+      <h2 id="bookings-list-title">Your booking records</h2>
+      <p class="bookings-list-intro">This list loads real booking records for the currently signed-in user.</p>
+
+      <p class="validation-message" id="bookings-list-message" aria-live="polite">Preparing your bookings list...</p>
+
+      <div id="bookings-list-container">
+        <p class="bookings-list-placeholder">Please wait while bookings are loaded.</p>
+      </div>
     </article>
   </section>
 
@@ -2160,6 +2172,8 @@ if (pageKey === 'bookings') {
   const bookingsForm = document.querySelector('#bookings-form');
   const bookingsMessage = document.querySelector('#bookings-form-message');
   const bookingsSubmitButton = document.querySelector('#bookings-submit-button');
+  const bookingsListMessage = document.querySelector('#bookings-list-message');
+  const bookingsListContainer = document.querySelector('#bookings-list-container');
   const apiHelpers = window.TailorMarketplaceApi;
   let selectedTailorId = '';
 
@@ -2189,6 +2203,127 @@ if (pageKey === 'bookings') {
     }
 
     return bookingFormData;
+  };
+
+
+  // Turn different possible bookings response shapes into one simple array so
+  // this page can stay flexible as API responses evolve.
+  const getBookingsCollectionItems = (apiData) => {
+    if (Array.isArray(apiData)) {
+      return apiData;
+    }
+
+    if (!apiData || typeof apiData !== 'object') {
+      return [];
+    }
+
+    const possibleArrays = [apiData.items, apiData.data, apiData.results, apiData.bookings];
+    const matchingArray = possibleArrays.find((value) => Array.isArray(value));
+
+    return matchingArray || [];
+  };
+
+  // Keep list message updates in one helper so loading, empty, success, and
+  // error states stay easy to read and maintain.
+  const updateBookingsListMessage = (message, stateClass = '') => {
+    bookingsListMessage.textContent = message;
+    bookingsListMessage.className = `validation-message ${stateClass}`.trim();
+  };
+
+  const renderBookingsListItems = (bookingItems) => {
+    const listHtml = bookingItems
+      .map((bookingItem) => {
+        const status = getFirstFilledValue(bookingItem, ['status', 'booking_status', 'state']) || 'Pending update';
+        const serviceRequested = getFirstFilledValue(bookingItem, ['service_requested', 'service', 'request']) || 'Service not provided';
+        const bookingDate = getFirstFilledValue(bookingItem, ['appointment_date', 'date', 'booking_date', 'created_at']) || 'Date not available';
+        const tailorName = getFirstFilledValue(bookingItem, ['tailor_name', 'tailor', 'business_name', 'shop_name']) || 'Tailor name not available';
+        const bookingId = getFirstFilledValue(bookingItem, ['booking_id', 'id', 'bookingId']) || 'N/A';
+
+        // Keep booking_id on both the card and button so this markup is ready
+        // for a future click handler that can call get_booking?booking_id=<id>.
+        return `
+          <article class="bookings-list-item" data-booking-id="${escapeHtml(bookingId)}">
+            <h3>Booking #${escapeHtml(bookingId)}</h3>
+            <dl class="bookings-list-meta">
+              <div>
+                <dt>Status</dt>
+                <dd>${escapeHtml(status)}</dd>
+              </div>
+              <div>
+                <dt>Service requested</dt>
+                <dd>${escapeHtml(serviceRequested)}</dd>
+              </div>
+              <div>
+                <dt>Tailor</dt>
+                <dd>${escapeHtml(tailorName)}</dd>
+              </div>
+              <div>
+                <dt>Date</dt>
+                <dd>${escapeHtml(bookingDate)}</dd>
+              </div>
+            </dl>
+            <div class="bookings-list-actions">
+              <button
+                class="button button-secondary bookings-detail-button"
+                type="button"
+                data-booking-id="${escapeHtml(bookingId)}"
+                disabled
+                aria-disabled="true"
+              >
+                Booking details coming soon
+              </button>
+            </div>
+          </article>
+        `;
+      })
+      .join('');
+
+    bookingsListContainer.innerHTML = `<div class="bookings-list-grid">${listHtml}</div>`;
+  };
+
+  // Load bookings for the signed-in customer using the centralized
+  // getUserBookings() helper from api.js.
+  const loadUserBookingsList = async () => {
+    const authToken = apiHelpers.getAuthToken();
+
+    if (!authToken) {
+      updateBookingsListMessage('Please sign in to view your bookings list.', 'is-error');
+      bookingsListContainer.innerHTML = '<p class="bookings-list-placeholder">No session token was found. Open the login page, sign in, then return here.</p>';
+      return;
+    }
+
+    updateBookingsListMessage('Loading your bookings list...', '');
+    bookingsListContainer.innerHTML = '<p class="bookings-list-placeholder">Fetching booking records from the Users API group...</p>';
+
+    try {
+      const result = await apiHelpers.getUserBookings();
+
+      if (apiHelpers.isUnauthorizedResponse(result)) {
+        updateBookingsListMessage('Your session expired. Please sign in again to view bookings.', 'is-error');
+        bookingsListContainer.innerHTML = '<p class="bookings-list-placeholder">The saved session is no longer valid.</p>';
+        return;
+      }
+
+      if (!result.ok) {
+        updateBookingsListMessage(result.errorMessage || 'We could not load your bookings right now.', 'is-error');
+        bookingsListContainer.innerHTML = '<p class="bookings-list-placeholder">The request failed before booking records could be shown.</p>';
+        return;
+      }
+
+      const bookingItems = getBookingsCollectionItems(result.data);
+
+      if (!bookingItems.length) {
+        updateBookingsListMessage('No bookings found yet. Submit your first booking to get started.', 'is-empty');
+        bookingsListContainer.innerHTML = '<p class="bookings-list-placeholder">When a booking is created, it will appear in this list.</p>';
+        return;
+      }
+
+      updateBookingsListMessage(`Loaded ${bookingItems.length} booking record${bookingItems.length === 1 ? '' : 's'} for your account.`, 'is-success');
+      renderBookingsListItems(bookingItems);
+    } catch (error) {
+      updateBookingsListMessage('Network error while loading bookings. Please try again.', 'is-error');
+      bookingsListContainer.innerHTML = '<p class="bookings-list-placeholder">The bookings list could not be loaded because the request did not finish.</p>';
+    }
   };
 
   bookingsForm.addEventListener('submit', async (event) => {
@@ -2235,6 +2370,10 @@ if (pageKey === 'bookings') {
 
       updateBookingsFormMessage('Booking request submitted successfully.', 'is-success');
       bookingsForm.reset();
+
+      // Refresh the real bookings list after a successful booking so users can
+      // quickly confirm that their latest request appears.
+      await loadUserBookingsList();
     } catch (error) {
       updateBookingsFormMessage('We could not reach the booking service right now. Please try again.', 'is-error');
     } finally {
@@ -2257,6 +2396,10 @@ if (pageKey === 'bookings') {
       ${cardBody}
     `;
   };
+
+  // Load the signed-in user's current bookings as soon as the page opens.
+  // This runs independently of tailor context so list viewing still works.
+  loadUserBookingsList();
 
   (async () => {
     const tailorId = getTailorIdFromQuery();
