@@ -35,6 +35,7 @@ const API_ENDPOINTS = {
   },
   users: {
     bookings: '/get_bookings',
+    bookingDetail: '/get_booking',
     reviews: '/get_reviews',
     profile: '/update_user_profile',
   },
@@ -299,6 +300,22 @@ const deleteTailor = (tailorId) => authenticatedRequest('app', `${API_ENDPOINTS.
 
 // Customer dashboard helpers use the users API base automatically.
 const getUserBookings = () => authenticatedRequest('users', API_ENDPOINTS.users.bookings, { method: 'GET' });
+/*
+  Load one enriched booking detail record for the signed-in user.
+
+  Endpoint used:
+  - GET /get_booking?booking_id=<id>
+
+  Why this helper exists:
+  - Pages should not build this endpoint URL manually.
+  - Keeping query parameter logic here makes pages easier for beginners to read.
+*/
+const getBookingById = (bookingId) => {
+  const safeBookingId = String(bookingId || '').trim();
+  const queryString = `?booking_id=${encodeURIComponent(safeBookingId)}`;
+
+  return authenticatedRequest('users', `${API_ENDPOINTS.users.bookingDetail}${queryString}`, { method: 'GET' });
+};
 const getUserReviews = () => authenticatedRequest('users', API_ENDPOINTS.users.reviews, { method: 'GET' });
 const updateUserProfile = (profileData) => authenticatedRequest('users', API_ENDPOINTS.users.profile, {
   method: 'PATCH',
@@ -341,6 +358,7 @@ window.TailorMarketplaceApi = {
   updateTailor,
   deleteTailor,
   getUserBookings,
+  getBookingById,
   getUserReviews,
   updateUserProfile,
   getBookings,

@@ -90,6 +90,19 @@ const pageContent = {
       { title: 'Clear fallback states', text: 'Missing IDs, empty records, and request errors each show helpful messages.' },
     ],
   },
+  'booking-detail': {
+    heroEyebrow: 'Booking Detail',
+    heroTitle: 'View one booking record with enriched customer and tailor details.',
+    heroText:
+      'This page reads bookingId from the URL query string, calls the centralized getBookingById() helper, and shows clear loading, empty, success, and error states.',
+    primaryAction: { label: 'Back to My Bookings', href: 'bookings.html' },
+    secondaryAction: { label: 'Open Dashboard', href: 'dashboard.html' },
+    highlights: [
+      { title: 'URL-driven detail page', text: 'Open this page with booking-detail.html?bookingId=12 to load one specific booking.' },
+      { title: 'Centralized API helper', text: 'All endpoint and query-string logic stays in api.js so page files stay simple.' },
+      { title: 'Friendly fallback states', text: 'Missing IDs, empty responses, and errors each show a clear status message.' },
+    ],
+  },
   bookings: {
     heroEyebrow: 'My Bookings',
     heroTitle: 'Review upcoming fittings, alterations, and delivery milestones.',
@@ -544,6 +557,49 @@ const renderTailorDetailShell = () => `
   </section>
 `;
 
+// Keep the Booking detail page shell simple and consistent with the shared
+// layout so only dynamic detail content needs to update after loading.
+const renderBookingDetailShell = () => `
+  <section class="hero-card">
+    <article class="hero-copy">
+      <span class="eyebrow">${page.heroEyebrow}</span>
+      <h1>${page.heroTitle}</h1>
+      <p>${page.heroText}</p>
+      <div class="hero-actions">
+        <a class="button button-primary" href="${localPath(page.primaryAction.href)}">${page.primaryAction.label}</a>
+        <a class="button button-secondary" href="${localPath(page.secondaryAction.href)}">${page.secondaryAction.label}</a>
+      </div>
+    </article>
+
+    <aside class="hero-panel booking-detail-status-panel is-loading" id="booking-detail-status-panel" aria-live="polite">
+      <p class="panel-label">Detail Status</p>
+      <h2>Loading booking detail...</h2>
+      <p>We are reading bookingId from the URL and requesting the enriched detail endpoint.</p>
+    </aside>
+  </section>
+
+  <section class="booking-detail-section" aria-labelledby="booking-detail-title">
+    <article class="feature-card booking-detail-card" id="booking-detail-card">
+      <span class="panel-label">Booking Record</span>
+      <h2 id="booking-detail-title">Preparing booking details</h2>
+      <p>Please wait while the page loads this booking from the authenticated endpoint.</p>
+    </article>
+  </section>
+
+  <section class="feature-grid" aria-label="Booking detail highlights">
+    ${page.highlights
+      .map(
+        (item) => `
+          <article class="feature-card">
+            <h2>${item.title}</h2>
+            <p>${item.text}</p>
+          </article>
+        `,
+      )
+      .join('')}
+  </section>
+`;
+
 // Keep the Bookings page shell consistent with other pages while creating
 // a dedicated area where selected-tailor booking context can load.
 const renderBookingsShell = () => `
@@ -659,6 +715,8 @@ contentRoot.innerHTML =
       ? renderDashboardShell()
       : pageKey === 'tailors'
         ? renderTailorsShell()
+        : pageKey === 'booking-detail'
+          ? renderBookingDetailShell()
         : pageKey === 'bookings'
           ? renderBookingsShell()
         : pageKey === 'tailor-detail'
@@ -1264,6 +1322,9 @@ if (pageKey === 'dashboard') {
                 const bookingStatus = getFirstMatchingValue(bookingItem, ['status', 'booking_status', 'state']) || 'Pending update';
                 const customerName = getFirstMatchingValue(bookingItem, ['customer_name', 'customer', 'name']) || 'Customer not listed';
                 const bookingDate = getFirstMatchingValue(bookingItem, ['appointment_date', 'date', 'booking_date', 'created_at']) || 'Date not available';
+                const bookingDetailHref = bookingId && bookingId !== 'N/A'
+                  ? `booking-detail.html?bookingId=${encodeURIComponent(bookingId)}`
+                  : '';
 
                 return `
                   <article
@@ -1291,14 +1352,11 @@ if (pageKey === 'dashboard') {
                       </div>
                     </dl>
                     <div class="dashboard-role-actions">
-                      <button
-                        type="button"
-                        class="button button-secondary dashboard-role-link dashboard-booking-detail-button"
-                        data-booking-id="${escapeHtml(bookingId)}"
-                        data-booking-detail-endpoint="/get_booking"
-                      >
-                        View booking details
-                      </button>
+                      ${
+                        bookingDetailHref
+                          ? `<a class="button button-secondary dashboard-role-link dashboard-booking-detail-button" href="${bookingDetailHref}">View booking details</a>`
+                          : '<p class="dashboard-section-note">Booking ID missing, so detail link is unavailable.</p>'
+                      }
                     </div>
                   </article>
                 `;
@@ -2248,6 +2306,204 @@ if (pageKey === 'tailor-detail') {
   })();
 }
 
+if (pageKey === 'booking-detail') {
+  const detailStatusPanel = document.querySelector('#booking-detail-status-panel');
+  const detailCard = document.querySelector('#booking-detail-card');
+  const apiHelpers = window.TailorMarketplaceApi;
+
+  // Read bookingId from the expected query string key:
+  // booking-detail.html?bookingId=12
+  const getBookingIdFromUrl = () => {
+    const queryParams = new URLSearchParams(window.location.search);
+    const bookingId = queryParams.get('bookingId');
+    return bookingId && bookingId.trim() ? bookingId.trim() : '';
+  };
+
+  // Keep status/card updates in one helper so each page state is easy to follow.
+  const updateDetailState = ({ title, description, cardTitle, cardBody, stateClass = '' }) => {
+    detailStatusPanel.className = `hero-panel booking-detail-status-panel ${stateClass}`.trim();
+    detailStatusPanel.innerHTML = `
+      <p class="panel-label">Detail Status</p>
+      <h2>${escapeHtml(title)}</h2>
+      <p>${escapeHtml(description)}</p>
+    `;
+
+    detailCard.className = `feature-card booking-detail-card ${stateClass}`.trim();
+    detailCard.innerHTML = `
+      <span class="panel-label">Booking Record</span>
+      <h2 id="booking-detail-title">${escapeHtml(cardTitle)}</h2>
+      ${cardBody}
+    `;
+  };
+
+  // Normalize date text into a readable format without failing if parsing fails.
+  const formatDate = (dateValue) => {
+    if (!dateValue) {
+      return 'Not available';
+    }
+
+    const parsedDate = new Date(dateValue);
+
+    if (Number.isNaN(parsedDate.getTime())) {
+      return String(dateValue);
+    }
+
+    return parsedDate.toLocaleString();
+  };
+
+  // Read common nested fields safely so this page can handle slightly different
+  // response shapes from the enriched endpoint.
+  const getNestedValue = (record, keyPath) => {
+    const keyParts = keyPath.split('.');
+    let currentValue = record;
+
+    for (const keyPart of keyParts) {
+      if (!currentValue || typeof currentValue !== 'object') {
+        return '';
+      }
+
+      currentValue = currentValue[keyPart];
+    }
+
+    return getFirstFilledValue({ value: currentValue }, ['value']);
+  };
+
+  // Render one booking record using the most useful enriched fields.
+  const renderBookingDetail = (bookingData) => {
+    const bookingId = getFirstFilledValue(bookingData, ['booking_id', 'id', 'bookingId']) || 'Not available';
+    const serviceRequested = getFirstFilledValue(bookingData, ['service_requested', 'service', 'request']) || 'Not provided';
+    const measurements = getFirstFilledValue(bookingData, ['measurements', 'measurement_notes', 'notes']) || 'Not provided';
+    const bookingStatus = getFirstFilledValue(bookingData, ['status', 'booking_status', 'state']) || 'Not provided';
+    const createdDateRaw = getFirstFilledValue(bookingData, ['created_at', 'createdAt']);
+    const bookingDateRaw = getFirstFilledValue(bookingData, ['appointment_date', 'booking_date', 'date']);
+    const tailorName = getFirstFilledValue(bookingData, ['tailor_name', 'tailor']) || getNestedValue(bookingData, 'tailor.name') || 'Not provided';
+    const tailorBusinessName = getFirstFilledValue(bookingData, ['tailor_business_name', 'business_name', 'shop_name'])
+      || getNestedValue(bookingData, 'tailor.business_name')
+      || 'Not provided';
+    const customerName = getFirstFilledValue(bookingData, ['customer_name', 'customer']) || getNestedValue(bookingData, 'customer.name') || 'Not provided';
+    const customerEmail = getFirstFilledValue(bookingData, ['customer_email', 'email']) || getNestedValue(bookingData, 'customer.email') || 'Not provided';
+    const inspirationImage = getFirstFilledValue(bookingData, ['inspiration_image_upload', 'inspiration_image', 'inspiration_image_url']);
+    const inspirationImageSafeUrl = inspirationImage && /^https?:\/\//i.test(inspirationImage.trim()) ? inspirationImage.trim() : '';
+
+    return `
+      <div class="booking-detail-grid">
+        <section class="booking-detail-group" aria-label="Booking summary">
+          <h3>Booking summary</h3>
+          <dl class="booking-detail-meta">
+            <div><dt>Booking ID</dt><dd>${escapeHtml(bookingId)}</dd></div>
+            <div><dt>Service requested</dt><dd>${escapeHtml(serviceRequested)}</dd></div>
+            <div><dt>Measurements</dt><dd>${escapeHtml(measurements)}</dd></div>
+            <div><dt>Status</dt><dd>${escapeHtml(bookingStatus)}</dd></div>
+            <div><dt>Created date</dt><dd>${escapeHtml(formatDate(createdDateRaw))}</dd></div>
+            <div><dt>Booking date</dt><dd>${escapeHtml(formatDate(bookingDateRaw))}</dd></div>
+          </dl>
+        </section>
+
+        <section class="booking-detail-group" aria-label="Tailor and customer info">
+          <h3>People involved</h3>
+          <dl class="booking-detail-meta">
+            <div><dt>Tailor name</dt><dd>${escapeHtml(tailorName)}</dd></div>
+            <div><dt>Tailor business</dt><dd>${escapeHtml(tailorBusinessName)}</dd></div>
+            <div><dt>Customer name</dt><dd>${escapeHtml(customerName)}</dd></div>
+            <div><dt>Customer email</dt><dd>${escapeHtml(customerEmail)}</dd></div>
+          </dl>
+        </section>
+      </div>
+
+      <section class="booking-detail-group" aria-label="Inspiration image">
+        <h3>Inspiration image</h3>
+        ${
+          inspirationImageSafeUrl
+            ? `<img class="booking-detail-image" src="${escapeHtml(inspirationImageSafeUrl)}" alt="Inspiration image for booking ${escapeHtml(bookingId)}" />`
+            : '<p class="booking-detail-empty-text">No inspiration image was provided for this booking.</p>'
+        }
+      </section>
+    `;
+  };
+
+  (async () => {
+    const bookingId = getBookingIdFromUrl();
+
+    if (!bookingId) {
+      updateDetailState({
+        title: 'Booking ID is missing.',
+        description: 'Open this page with a booking ID in the URL, for example ?bookingId=12.',
+        cardTitle: 'No booking ID was found',
+        cardBody: '<p>This page needs a booking ID in the URL before it can request detail data.</p>',
+        stateClass: 'is-empty',
+      });
+      return;
+    }
+
+    updateDetailState({
+      title: 'Loading booking detail...',
+      description: `Requesting booking ID ${bookingId} using the authenticated getBookingById() helper.`,
+      cardTitle: 'Loading detail record',
+      cardBody: '<p>Please wait while this booking detail record is being loaded.</p>',
+      stateClass: 'is-loading',
+    });
+
+    try {
+      const result = await apiHelpers.getBookingById(bookingId);
+      const bookingData = result && result.data;
+
+      if (apiHelpers.isUnauthorizedResponse(result)) {
+        updateDetailState({
+          title: 'Session expired',
+          description: 'Your session is no longer valid for booking detail requests.',
+          cardTitle: 'Redirecting to login',
+          cardBody: '<p>Your saved token is being cleared now. Please sign in again to continue.</p>',
+          stateClass: 'is-error',
+        });
+
+        setTimeout(() => {
+          apiHelpers.clearAuthToken();
+          apiHelpers.redirectToLoginPage('..');
+        }, 1000);
+        return;
+      }
+
+      if (!result.ok) {
+        updateDetailState({
+          title: 'We could not load this booking detail.',
+          description: result.errorMessage || 'The booking detail request returned an error response.',
+          cardTitle: 'Booking detail is unavailable',
+          cardBody: '<p>Please go back to your bookings list and try opening this booking again.</p>',
+          stateClass: 'is-error',
+        });
+        return;
+      }
+
+      if (!bookingData || (typeof bookingData === 'object' && !Object.keys(bookingData).length)) {
+        updateDetailState({
+          title: 'No detail record was returned.',
+          description: 'The request worked, but this booking ID did not return detail data.',
+          cardTitle: 'Booking not found',
+          cardBody: '<p>Try opening another booking from the bookings page or dashboard.</p>',
+          stateClass: 'is-empty',
+        });
+        return;
+      }
+
+      updateDetailState({
+        title: 'Booking detail loaded successfully.',
+        description: 'This page is now showing enriched booking information from the authenticated endpoint.',
+        cardTitle: `Booking #${getFirstFilledValue(bookingData, ['booking_id', 'id', 'bookingId']) || bookingId}`,
+        cardBody: renderBookingDetail(bookingData),
+        stateClass: 'is-success',
+      });
+    } catch (error) {
+      updateDetailState({
+        title: 'Network error while loading booking detail.',
+        description: 'We could not reach Xano right now. Please check your connection and try again.',
+        cardTitle: 'Request could not finish',
+        cardBody: '<p>The detail page keeps this message visible so the issue is clear to users.</p>',
+        stateClass: 'is-error',
+      });
+    }
+  })();
+}
+
 if (pageKey === 'bookings') {
   const bookingsStatusPanel = document.querySelector('#bookings-status-panel');
   const bookingsContextCard = document.querySelector('#bookings-context-card');
@@ -2320,9 +2576,10 @@ if (pageKey === 'bookings') {
         const bookingDate = getFirstFilledValue(bookingItem, ['appointment_date', 'date', 'booking_date', 'created_at']) || 'Date not available';
         const tailorName = getFirstFilledValue(bookingItem, ['tailor_name', 'tailor', 'business_name', 'shop_name']) || 'Tailor name not available';
         const bookingId = getFirstFilledValue(bookingItem, ['booking_id', 'id', 'bookingId']) || 'N/A';
+        const detailHref = bookingId && bookingId !== 'N/A' ? `booking-detail.html?bookingId=${encodeURIComponent(bookingId)}` : '';
 
-        // Keep booking_id on both the card and button so this markup is ready
-        // for a future click handler that can call get_booking?booking_id=<id>.
+        // Keep this link simple so each booking item can open the shared detail
+        // page using booking-detail.html?bookingId=<id>.
         return `
           <article class="bookings-list-item" data-booking-id="${escapeHtml(bookingId)}">
             <h3>Booking #${escapeHtml(bookingId)}</h3>
@@ -2345,15 +2602,11 @@ if (pageKey === 'bookings') {
               </div>
             </dl>
             <div class="bookings-list-actions">
-              <button
-                class="button button-secondary bookings-detail-button"
-                type="button"
-                data-booking-id="${escapeHtml(bookingId)}"
-                disabled
-                aria-disabled="true"
-              >
-                Booking details coming soon
-              </button>
+              ${
+                detailHref
+                  ? `<a class="button button-secondary bookings-detail-button" href="${detailHref}" data-booking-id="${escapeHtml(bookingId)}">View booking details</a>`
+                  : '<p class="bookings-list-link-note">Booking ID missing, so detail link is unavailable.</p>'
+              }
             </div>
           </article>
         `;
