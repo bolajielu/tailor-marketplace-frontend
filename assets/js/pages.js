@@ -94,7 +94,7 @@ const pageContent = {
     heroEyebrow: 'Booking Detail',
     heroTitle: 'View one booking record with enriched customer and tailor details.',
     heroText:
-      'This page reads bookingId from the URL query string, calls the centralized getBookingById() helper, and shows clear loading, empty, success, and error states.',
+      'This page reads bookingId from the URL query string, checks the signed-in role, then calls the centralized customer or tailor booking detail helper with clear loading, empty, success, and error states.',
     primaryAction: { label: 'Back to My Bookings', href: 'bookings.html' },
     secondaryAction: { label: 'Open Dashboard', href: 'dashboard.html' },
     highlights: [
@@ -1231,7 +1231,7 @@ if (pageKey === 'dashboard') {
       {
         label: 'Tailor Activity',
         title: 'Loading your booking and review summary',
-        text: 'We are requesting tailor-related bookings and reviews from the App API group now.',
+        text: 'We are requesting tailor bookings from the tailor-specific endpoint and reviews from the App API group now.',
         stateClass: 'is-loading',
         body: '<p class="dashboard-section-note">Please wait while your activity summary is prepared.</p>',
         links: [
@@ -1242,20 +1242,19 @@ if (pageKey === 'dashboard') {
       {
         label: 'Tailor Bookings',
         title: 'Loading your assigned bookings',
-        text: 'We are preparing a real bookings list that only includes records linked to your tailor profile.',
+        text: 'We are preparing your real tailor bookings list from the tailor-specific backend endpoint.',
         stateClass: 'is-loading',
-        body: '<p class="dashboard-section-note">Please wait while your booking records are requested and matched.</p>',
+        body: '<p class="dashboard-section-note">Please wait while your booking records are requested from the tailor bookings endpoint.</p>',
         links: [{ label: 'Open bookings page', href: 'bookings.html' }],
       },
     ];
   };
 
-  const createTailorCardsFromData = (currentUser, tailorResult, bookingsResult, reviewsResult) => {
+  const createTailorCardsFromData = (currentUser, tailorResult, tailorBookingsResult, reviewsResult) => {
     const tailorRecords = getCollectionItems(tailorResult.data);
-    const bookingItems = getCollectionItems(bookingsResult.data);
+    const tailorBookingItems = getCollectionItems(tailorBookingsResult.data);
     const reviewItems = getCollectionItems(reviewsResult.data);
     const tailorProfile = findMatchingTailorProfile(currentUser, tailorRecords);
-    const matchingBookings = filterRecordsForTailor(bookingItems, currentUser, tailorProfile);
     const matchingReviews = filterRecordsForTailor(reviewItems, currentUser, tailorProfile);
     const profileName =
       getFirstMatchingValue(tailorProfile, ['business_name', 'shop_name', 'name', 'full_name', 'fullName'])
@@ -1290,31 +1289,31 @@ if (pageKey === 'dashboard') {
         <p class="dashboard-section-note">Fallback strategy: the dashboard compares common ID, email, and name fields from <code>/auth/me</code> and <code>GET /tailor</code> until a dedicated &quot;my tailor profile&quot; endpoint is available.</p>
       `;
 
-    const activityStateClass = bookingsResult.ok && reviewsResult.ok
-      ? (matchingBookings.length || matchingReviews.length ? 'is-success' : 'is-empty')
+    const activityStateClass = tailorBookingsResult.ok && reviewsResult.ok
+      ? (tailorBookingItems.length || matchingReviews.length ? 'is-success' : 'is-empty')
       : 'is-error';
 
     // Build a dedicated bookings card for tailor users.
     // This section keeps clear loading/empty/success/error behavior and is
     // ready for a future GET /get_booking?booking_id=<id> detail flow.
-    const tailorBookingsStateClass = !bookingsResult.ok
+    const tailorBookingsStateClass = !tailorBookingsResult.ok
       ? 'is-error'
-      : matchingBookings.length
+      : tailorBookingItems.length
         ? 'is-success'
         : 'is-empty';
 
-    const tailorBookingsText = !bookingsResult.ok
-      ? bookingsResult.errorMessage || 'We could not load tailor bookings right now.'
-      : matchingBookings.length
-        ? 'These bookings were loaded from the App API group and matched to your tailor profile.'
-        : 'The bookings request worked, but no records are linked to this tailor profile yet.';
+    const tailorBookingsText = !tailorBookingsResult.ok
+      ? tailorBookingsResult.errorMessage || 'We could not load tailor bookings right now.'
+      : tailorBookingItems.length
+        ? 'These bookings were loaded from the tailor-specific GET /get_tailor_bookings endpoint.'
+        : 'The tailor bookings request worked, but no booking records were returned yet.';
 
-    const tailorBookingsBody = !bookingsResult.ok
+    const tailorBookingsBody = !tailorBookingsResult.ok
       ? '<p class="dashboard-section-note">Try refreshing this page or signing in again if your session expired.</p>'
-      : matchingBookings.length
+      : tailorBookingItems.length
         ? `
           <div class="dashboard-bookings-list">
-            ${matchingBookings
+            ${tailorBookingItems
               .slice(0, 6)
               .map((bookingItem) => {
                 const bookingId = getFirstMatchingValue(bookingItem, ['booking_id', 'id', 'bookingId']) || 'N/A';
@@ -1330,7 +1329,7 @@ if (pageKey === 'dashboard') {
                   <article
                     class="dashboard-record-item dashboard-booking-item"
                     data-booking-id="${escapeHtml(bookingId)}"
-                    data-booking-detail-endpoint="/get_booking"
+                    data-booking-detail-endpoint="/get_tailor_booking"
                   >
                     <h4>Booking #${escapeHtml(bookingId)}</h4>
                     <dl>
@@ -1383,24 +1382,24 @@ if (pageKey === 'dashboard') {
         label: 'Tailor Activity',
         title: activityStateClass === 'is-error'
           ? 'Activity summary could not be fully loaded'
-          : matchingBookings.length || matchingReviews.length
+          : tailorBookingItems.length || matchingReviews.length
             ? 'Your live tailor activity summary'
-            : 'No tailor activity is linked yet',
+            : 'No tailor activity is available yet',
         text: activityStateClass === 'is-error'
-          ? `${bookingsResult.ok ? '' : bookingsResult.errorMessage || 'Bookings could not be loaded.'} ${reviewsResult.ok ? '' : reviewsResult.errorMessage || 'Reviews could not be loaded.'}`.trim()
-          : matchingBookings.length || matchingReviews.length
-            ? 'These counts are based on tailor-related booking and review records returned from the App API group.'
-            : 'The requests worked, but we did not find booking or review records linked to this tailor yet.',
+          ? `${tailorBookingsResult.ok ? '' : tailorBookingsResult.errorMessage || 'Bookings could not be loaded.'} ${reviewsResult.ok ? '' : reviewsResult.errorMessage || 'Reviews could not be loaded.'}`.trim()
+          : tailorBookingItems.length || matchingReviews.length
+            ? 'These counts are based on tailor bookings from GET /get_tailor_bookings and reviews from the App API group.'
+            : 'The requests worked, but no tailor bookings or linked reviews were returned yet.',
         stateClass: activityStateClass,
         body: activityStateClass === 'is-error'
           ? '<p class="dashboard-section-note">If these requests need different backend permissions, the profile summary above still gives the tailor a useful live snapshot.</p>'
           : `
             ${renderCustomerSummaryList([
-              { label: 'Bookings linked to this tailor', value: formatDashboardCount(matchingBookings, 'booking', 'bookings') },
+              { label: 'Tailor bookings returned', value: formatDashboardCount(tailorBookingItems, 'booking', 'bookings') },
               { label: 'Reviews linked to this tailor', value: formatDashboardCount(matchingReviews, 'review', 'reviews') },
               {
                 label: 'Latest booking status',
-                value: getFirstMatchingValue(matchingBookings[0], ['status', 'booking_status', 'state']) || 'Not available yet',
+                value: getFirstMatchingValue(tailorBookingItems[0], ['status', 'booking_status', 'state']) || 'Not available yet',
               },
               {
                 label: 'Latest review rating',
@@ -1425,10 +1424,10 @@ if (pageKey === 'dashboard') {
       },
       {
         label: 'Tailor Bookings',
-        title: !bookingsResult.ok
+        title: !tailorBookingsResult.ok
           ? 'Bookings could not be loaded'
-          : matchingBookings.length
-            ? `You have ${formatDashboardCount(matchingBookings, 'assigned booking', 'assigned bookings')}`
+          : tailorBookingItems.length
+            ? `You have ${formatDashboardCount(tailorBookingItems, 'assigned booking', 'assigned bookings')}`
             : 'No assigned bookings yet',
         text: tailorBookingsText,
         stateClass: tailorBookingsStateClass,
@@ -1757,18 +1756,18 @@ if (pageKey === 'dashboard') {
         } else if (userRole === 'tailor') {
           renderDashboardCards(
             'Tailor dashboard sections',
-            'These sections use live tailor-related data from the App API group while keeping the protected dashboard flow the same.',
+            'These sections use live tailor bookings from role-specific endpoints while keeping the protected dashboard flow the same.',
             createTailorLoadingCards(),
           );
 
-          const [tailorResult, bookingsResult, reviewsResult] = await Promise.all([
+          const [tailorResult, tailorBookingsResult, reviewsResult] = await Promise.all([
             apiHelpers.getTailors(),
-            apiHelpers.getAppBookings(),
+            apiHelpers.getTailorBookings(),
             apiHelpers.getAppReviews(),
           ]);
 
           if (apiHelpers.isUnauthorizedResponse(tailorResult)
-            || apiHelpers.isUnauthorizedResponse(bookingsResult)
+            || apiHelpers.isUnauthorizedResponse(tailorBookingsResult)
             || apiHelpers.isUnauthorizedResponse(reviewsResult)) {
             updateDashboardState({
               title: 'Your session has expired.',
@@ -1807,8 +1806,8 @@ if (pageKey === 'dashboard') {
 
           renderDashboardCards(
             'Tailor dashboard sections',
-            'These summaries come from window.TailorMarketplaceApi.getTailors(), getAppBookings(), and getAppReviews().',
-            createTailorCardsFromData(currentUser, tailorResult, bookingsResult, reviewsResult),
+            'These summaries come from window.TailorMarketplaceApi.getTailors(), getTailorBookings(), and getAppReviews().',
+            createTailorCardsFromData(currentUser, tailorResult, tailorBookingsResult, reviewsResult),
           );
         } else {
           renderRoleCards(userRole);
@@ -2437,14 +2436,45 @@ if (pageKey === 'booking-detail') {
 
     updateDetailState({
       title: 'Loading booking detail...',
-      description: `Requesting booking ID ${bookingId} using the authenticated getBookingById() helper.`,
+      description: `Checking your role and requesting booking ID ${bookingId} from the correct authenticated booking endpoint.`,
       cardTitle: 'Loading detail record',
       cardBody: '<p>Please wait while this booking detail record is being loaded.</p>',
       stateClass: 'is-loading',
     });
 
     try {
-      const result = await apiHelpers.getBookingById(bookingId);
+      // Decide which booking detail endpoint to call based on the signed-in role.
+      // - customer -> getBookingById()      -> GET /get_booking
+      // - tailor   -> getTailorBookingById() -> GET /get_tailor_booking
+      let detailRequestHelper = apiHelpers.getBookingById;
+      let detailEndpointLabel = 'GET /get_booking';
+
+      const currentUserResult = await apiHelpers.getCurrentUser();
+
+      if (apiHelpers.isUnauthorizedResponse(currentUserResult)) {
+        updateDetailState({
+          title: 'Session expired',
+          description: 'Your session is no longer valid for booking detail requests.',
+          cardTitle: 'Redirecting to login',
+          cardBody: '<p>Your saved token is being cleared now. Please sign in again to continue.</p>',
+          stateClass: 'is-error',
+        });
+
+        setTimeout(() => {
+          apiHelpers.clearAuthToken();
+          apiHelpers.redirectToLoginPage('..');
+        }, 1000);
+        return;
+      }
+
+      const currentUserRole = getUserRole(currentUserResult.data);
+
+      if (currentUserRole === 'tailor') {
+        detailRequestHelper = apiHelpers.getTailorBookingById;
+        detailEndpointLabel = 'GET /get_tailor_booking';
+      }
+
+      const result = await detailRequestHelper(bookingId);
       const bookingData = result && result.data;
 
       if (apiHelpers.isUnauthorizedResponse(result)) {
@@ -2487,7 +2517,7 @@ if (pageKey === 'booking-detail') {
 
       updateDetailState({
         title: 'Booking detail loaded successfully.',
-        description: 'This page is now showing enriched booking information from the authenticated endpoint.',
+        description: `This page is now showing enriched booking information from ${detailEndpointLabel}.`,
         cardTitle: `Booking #${getFirstFilledValue(bookingData, ['booking_id', 'id', 'bookingId']) || bookingId}`,
         cardBody: renderBookingDetail(bookingData),
         stateClass: 'is-success',
