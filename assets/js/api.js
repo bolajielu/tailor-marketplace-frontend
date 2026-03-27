@@ -15,6 +15,7 @@ const API_BASE_URLS = {
   auth: 'https://x8ki-letl-twmt.n7.xano.io/api:7K6R8GYB',
   app: 'https://x8ki-letl-twmt.n7.xano.io/api:lWSPi4ll',
   users: 'https://x8ki-letl-twmt.n7.xano.io/api:Jp0dBE1E',
+  tailorBookings: 'https://x8ki-letl-twmt.n7.xano.io/api:lWSPi4ll',
 };
 
 // Keep endpoint paths grouped by API area so it is easy to see which base URL they belong to.
@@ -38,6 +39,10 @@ const API_ENDPOINTS = {
     bookingDetail: '/get_booking',
     reviews: '/get_reviews',
     profile: '/update_user_profile',
+  },
+  tailorBookings: {
+    bookings: '/get_tailor_bookings',
+    bookingDetail: '/get_tailor_booking',
   },
 };
 
@@ -257,6 +262,30 @@ const authenticatedRequest = (apiGroup, endpointPath, options = {}) => {
   });
 };
 
+
+// Keep query-string building in one helper so page files never need to build
+// URLSearchParams for API endpoints directly.
+const buildQueryString = (queryParams = {}) => {
+  const params = new URLSearchParams();
+
+  Object.entries(queryParams).forEach(([key, value]) => {
+    if (value === undefined || value === null) {
+      return;
+    }
+
+    const stringValue = String(value).trim();
+
+    if (!stringValue) {
+      return;
+    }
+
+    params.append(key, stringValue);
+  });
+
+  const serializedParams = params.toString();
+  return serializedParams ? `?${serializedParams}` : '';
+};
+
 // Authentication helpers use the auth API base automatically.
 const loginUser = (loginData) => postRequest('auth', API_ENDPOINTS.auth.login, loginData);
 const signupUser = (signupData) => postRequest('auth', API_ENDPOINTS.auth.signup, signupData);
@@ -311,11 +340,17 @@ const getUserBookings = () => authenticatedRequest('users', API_ENDPOINTS.users.
   - Keeping query parameter logic here makes pages easier for beginners to read.
 */
 const getBookingById = (bookingId) => {
-  const safeBookingId = String(bookingId || '').trim();
-  const queryString = `?booking_id=${encodeURIComponent(safeBookingId)}`;
-
+  const queryString = buildQueryString({ booking_id: bookingId });
   return authenticatedRequest('users', `${API_ENDPOINTS.users.bookingDetail}${queryString}`, { method: 'GET' });
 };
+
+// Tailor booking helpers now use the tailor-specific authenticated endpoints.
+const getTailorBookings = () => authenticatedRequest('tailorBookings', API_ENDPOINTS.tailorBookings.bookings, { method: 'GET' });
+const getTailorBookingById = (bookingId) => {
+  const queryString = buildQueryString({ booking_id: bookingId });
+  return authenticatedRequest('tailorBookings', `${API_ENDPOINTS.tailorBookings.bookingDetail}${queryString}`, { method: 'GET' });
+};
+
 const getUserReviews = () => authenticatedRequest('users', API_ENDPOINTS.users.reviews, { method: 'GET' });
 const updateUserProfile = (profileData) => authenticatedRequest('users', API_ENDPOINTS.users.profile, {
   method: 'PATCH',
@@ -346,6 +381,7 @@ window.TailorMarketplaceApi = {
   patchRequest,
   deleteRequest,
   authenticatedRequest,
+  buildQueryString,
   loginUser,
   signupUser,
   getCurrentUser,
@@ -359,6 +395,8 @@ window.TailorMarketplaceApi = {
   deleteTailor,
   getUserBookings,
   getBookingById,
+  getTailorBookings,
+  getTailorBookingById,
   getUserReviews,
   updateUserProfile,
   getBookings,
