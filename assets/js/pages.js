@@ -196,6 +196,79 @@ const getUserRole = (userData) => {
   return String(possibleRoleValue).trim().toLowerCase();
 };
 
+// Convert many possible date inputs into a Date object safely.
+// This helper supports:
+// - normal timestamp strings
+// - epoch millisecond numbers like 1753934235976
+// - numeric strings that contain epoch milliseconds
+// - empty/invalid values (returns null)
+const parsePossibleDate = (dateValue) => {
+  if (dateValue === undefined || dateValue === null || dateValue === '') {
+    return null;
+  }
+
+  if (dateValue instanceof Date) {
+    return Number.isNaN(dateValue.getTime()) ? null : dateValue;
+  }
+
+  // Support raw epoch milliseconds values from API responses.
+  if (typeof dateValue === 'number' && Number.isFinite(dateValue)) {
+    const numericDate = new Date(dateValue);
+    return Number.isNaN(numericDate.getTime()) ? null : numericDate;
+  }
+
+  if (typeof dateValue === 'string') {
+    const trimmedValue = dateValue.trim();
+
+    if (!trimmedValue) {
+      return null;
+    }
+
+    // Handle numeric strings like "1753934235976" as epoch milliseconds.
+    if (/^\d+$/.test(trimmedValue)) {
+      const numericDate = new Date(Number(trimmedValue));
+      return Number.isNaN(numericDate.getTime()) ? null : numericDate;
+    }
+
+    const stringDate = new Date(trimmedValue);
+    return Number.isNaN(stringDate.getTime()) ? null : stringDate;
+  }
+
+  return null;
+};
+
+// Format date values for date-only labels like "Due date".
+const formatDisplayDate = (dateValue, fallbackText = 'Not available') => {
+  const parsedDate = parsePossibleDate(dateValue);
+
+  if (!parsedDate) {
+    return fallbackText;
+  }
+
+  return parsedDate.toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+};
+
+// Format date values for date+time labels like "Booking submitted".
+const formatDisplayDateTime = (dateValue, fallbackText = 'Not available') => {
+  const parsedDate = parsePossibleDate(dateValue);
+
+  if (!parsedDate) {
+    return fallbackText;
+  }
+
+  return parsedDate.toLocaleString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+};
+
 const renderStandardPage = () => `
   <section class="hero-card">
     <div class="hero-copy">
@@ -1168,7 +1241,10 @@ if (pageKey === 'dashboard') {
                 getFirstMatchingValue(item, ['service_name', 'service', 'title', 'tailor_name', 'tailor']) || `Booking ${index + 1}`,
               detailRows: (item) => [
                 { label: 'Status', value: getFirstMatchingValue(item, ['status', 'booking_status', 'state']) || 'Pending update' },
-                { label: 'Date', value: getFirstMatchingValue(item, ['appointment_date', 'date', 'booking_date', 'created_at']) || 'Date not available' },
+                {
+                  label: 'Booking submitted',
+                  value: formatDisplayDateTime(getFirstMatchingValue(item, ['created_at', 'createdAt'])),
+                },
                 { label: 'Tailor', value: getFirstMatchingValue(item, ['tailor_name', 'tailor', 'shop_name']) || 'Tailor not listed' },
               ],
             })}
@@ -1320,7 +1396,9 @@ if (pageKey === 'dashboard') {
                 const serviceRequested = getFirstMatchingValue(bookingItem, ['service_requested', 'service_name', 'service', 'title']) || 'Service not provided';
                 const bookingStatus = getFirstMatchingValue(bookingItem, ['status', 'booking_status', 'state']) || 'Pending update';
                 const customerName = getFirstMatchingValue(bookingItem, ['customer_name', 'customer', 'name']) || 'Customer not listed';
-                const bookingDate = getFirstMatchingValue(bookingItem, ['appointment_date', 'date', 'booking_date', 'created_at']) || 'Date not available';
+                const submittedRaw = getFirstMatchingValue(bookingItem, ['created_at', 'createdAt']);
+                const appointmentRaw = getFirstMatchingValue(bookingItem, ['appointment_datetime', 'appointment_at', 'appointment_date', 'appointmentDate']);
+                const dueDateRaw = getFirstMatchingValue(bookingItem, ['due_date', 'dueDate']);
                 const bookingDetailHref = bookingId && bookingId !== 'N/A'
                   ? `booking-detail.html?bookingId=${encodeURIComponent(bookingId)}`
                   : '';
@@ -1346,9 +1424,29 @@ if (pageKey === 'dashboard') {
                         <dd>${escapeHtml(customerName)}</dd>
                       </div>
                       <div>
-                        <dt>Date</dt>
-                        <dd>${escapeHtml(bookingDate)}</dd>
+                        <dt>Booking submitted</dt>
+                        <dd>${escapeHtml(formatDisplayDateTime(submittedRaw))}</dd>
                       </div>
+                      ${
+                        appointmentRaw
+                          ? `
+                            <div>
+                              <dt>Appointment</dt>
+                              <dd>${escapeHtml(formatDisplayDateTime(appointmentRaw))}</dd>
+                            </div>
+                          `
+                          : ''
+                      }
+                      ${
+                        dueDateRaw
+                          ? `
+                            <div>
+                              <dt>Due date</dt>
+                              <dd>${escapeHtml(formatDisplayDate(dueDateRaw))}</dd>
+                            </div>
+                          `
+                          : ''
+                      }
                     </dl>
                     <div class="dashboard-role-actions">
                       ${
@@ -2335,21 +2433,6 @@ if (pageKey === 'booking-detail') {
     `;
   };
 
-  // Normalize date text into a readable format without failing if parsing fails.
-  const formatDate = (dateValue) => {
-    if (!dateValue) {
-      return 'Not available';
-    }
-
-    const parsedDate = new Date(dateValue);
-
-    if (Number.isNaN(parsedDate.getTime())) {
-      return String(dateValue);
-    }
-
-    return parsedDate.toLocaleString();
-  };
-
   // Read common nested fields safely so this page can handle slightly different
   // response shapes from the enriched endpoint.
   const getNestedValue = (record, keyPath) => {
@@ -2374,13 +2457,33 @@ if (pageKey === 'booking-detail') {
     const measurements = getFirstFilledValue(bookingData, ['measurements', 'measurement_notes', 'notes']) || 'Not provided';
     const bookingStatus = getFirstFilledValue(bookingData, ['status', 'booking_status', 'state']) || 'Not provided';
     const createdDateRaw = getFirstFilledValue(bookingData, ['created_at', 'createdAt']);
-    const bookingDateRaw = getFirstFilledValue(bookingData, ['appointment_date', 'booking_date', 'date']);
+    const appointmentRaw = getFirstFilledValue(bookingData, ['appointment_datetime', 'appointment_at', 'appointment_date', 'appointmentDate']);
+    const dueDateRaw = getFirstFilledValue(bookingData, ['due_date', 'dueDate']);
+    const completionDateRaw = getFirstFilledValue(bookingData, ['completion_date', 'completionDate']);
+    const customerNote = getFirstFilledValue(bookingData, ['customer_note', 'note_for_tailor']);
+    const cancellationReason = getFirstFilledValue(bookingData, ['cancellation_reason', 'cancel_reason']);
+    const priceQuote = getFirstFilledValue(bookingData, ['price_quote', 'quoted_price']);
+    const finalPrice = getFirstFilledValue(bookingData, ['final_price', 'completed_price']);
     const tailorName = getFirstFilledValue(bookingData, ['tailor_name', 'tailor']) || getNestedValue(bookingData, 'tailor.name') || 'Not provided';
     const tailorBusinessName = getFirstFilledValue(bookingData, ['tailor_business_name', 'business_name', 'shop_name'])
       || getNestedValue(bookingData, 'tailor.business_name')
       || 'Not provided';
-    const customerName = getFirstFilledValue(bookingData, ['customer_name', 'customer']) || getNestedValue(bookingData, 'customer.name') || 'Not provided';
-    const customerEmail = getFirstFilledValue(bookingData, ['customer_email', 'email']) || getNestedValue(bookingData, 'customer.email') || 'Not provided';
+    // Keep customer details sourced from enriched user response objects.
+    // We do not read duplicated customer profile fields from the booking table.
+    const customerName = getNestedValue(bookingData, 'customer.name')
+      || getNestedValue(bookingData, 'customer.full_name')
+      || getNestedValue(bookingData, 'user.name')
+      || getNestedValue(bookingData, 'user.full_name')
+      || 'Not provided';
+    const customerEmail = getNestedValue(bookingData, 'customer.email')
+      || getNestedValue(bookingData, 'user.email')
+      || 'Not provided';
+    const hasReviewRaw = bookingData && (bookingData.has_review ?? bookingData.hasReview);
+    const hasReview = hasReviewRaw === undefined || hasReviewRaw === null
+      ? 'Not provided'
+      : hasReviewRaw
+        ? 'Yes'
+        : 'No';
     const inspirationImage = getFirstFilledValue(bookingData, ['inspiration_image_upload', 'inspiration_image', 'inspiration_image_url']);
     const inspirationImageSafeUrl = inspirationImage && /^https?:\/\//i.test(inspirationImage.trim()) ? inspirationImage.trim() : '';
 
@@ -2393,8 +2496,15 @@ if (pageKey === 'booking-detail') {
             <div><dt>Service requested</dt><dd>${escapeHtml(serviceRequested)}</dd></div>
             <div><dt>Measurements</dt><dd>${escapeHtml(measurements)}</dd></div>
             <div><dt>Status</dt><dd>${escapeHtml(bookingStatus)}</dd></div>
-            <div><dt>Created date</dt><dd>${escapeHtml(formatDate(createdDateRaw))}</dd></div>
-            <div><dt>Booking date</dt><dd>${escapeHtml(formatDate(bookingDateRaw))}</dd></div>
+            <div><dt>Booking submitted</dt><dd>${escapeHtml(formatDisplayDateTime(createdDateRaw))}</dd></div>
+            <div><dt>Appointment</dt><dd>${escapeHtml(formatDisplayDateTime(appointmentRaw))}</dd></div>
+            <div><dt>Due date</dt><dd>${escapeHtml(formatDisplayDate(dueDateRaw))}</dd></div>
+            <div><dt>Completion date</dt><dd>${escapeHtml(formatDisplayDate(completionDateRaw))}</dd></div>
+            <div><dt>Customer note</dt><dd>${escapeHtml(customerNote || 'Not provided')}</dd></div>
+            <div><dt>Has review</dt><dd>${escapeHtml(hasReview)}</dd></div>
+            <div><dt>Price quote</dt><dd>${escapeHtml(priceQuote || 'Not provided')}</dd></div>
+            <div><dt>Final price</dt><dd>${escapeHtml(finalPrice || 'Not provided')}</dd></div>
+            <div><dt>Cancellation reason</dt><dd>${escapeHtml(cancellationReason || 'Not provided')}</dd></div>
           </dl>
         </section>
 
@@ -2603,7 +2713,7 @@ if (pageKey === 'bookings') {
       .map((bookingItem) => {
         const status = getFirstFilledValue(bookingItem, ['status', 'booking_status', 'state']) || 'Pending update';
         const serviceRequested = getFirstFilledValue(bookingItem, ['service_requested', 'service', 'request']) || 'Service not provided';
-        const bookingDate = getFirstFilledValue(bookingItem, ['appointment_date', 'date', 'booking_date', 'created_at']) || 'Date not available';
+        const submittedAtRaw = getFirstFilledValue(bookingItem, ['created_at', 'createdAt']);
         const tailorName = getFirstFilledValue(bookingItem, ['tailor_name', 'tailor', 'business_name', 'shop_name']) || 'Tailor name not available';
         const bookingId = getFirstFilledValue(bookingItem, ['booking_id', 'id', 'bookingId']) || 'N/A';
         const detailHref = bookingId && bookingId !== 'N/A' ? `booking-detail.html?bookingId=${encodeURIComponent(bookingId)}` : '';
@@ -2627,8 +2737,8 @@ if (pageKey === 'bookings') {
                 <dd>${escapeHtml(tailorName)}</dd>
               </div>
               <div>
-                <dt>Date</dt>
-                <dd>${escapeHtml(bookingDate)}</dd>
+                <dt>Booking submitted</dt>
+                <dd>${escapeHtml(formatDisplayDateTime(submittedAtRaw))}</dd>
               </div>
             </dl>
             <div class="bookings-list-actions">
