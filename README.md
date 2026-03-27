@@ -8,3 +8,6 @@ Tailors marketplace web appliction
 - `assets/js/pages.js` stores page-specific content so each screen is easy to update later.
 - `assets/css/styles.css` contains the responsive design system for the shared layout.
 
+## 📄 Documentation
+
+- [Project Context](docs/PROJECT_CONTEXT.md)
