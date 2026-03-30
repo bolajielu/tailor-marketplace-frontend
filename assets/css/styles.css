@@ -974,12 +974,29 @@ button {
 
 .bookings-detail-button {
   width: fit-content;
+  min-width: 13.5rem;
+  box-shadow: 0 6px 16px rgba(31, 111, 235, 0.22);
+  transition: transform 0.15s ease, box-shadow 0.2s ease;
+}
+
+.bookings-detail-button:hover,
+.bookings-detail-button:focus-visible,
+.dashboard-booking-detail-button:hover,
+.dashboard-booking-detail-button:focus-visible {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 20px rgba(23, 78, 166, 0.28);
 }
 
 .bookings-list-link-note,
 .booking-detail-empty-text {
   margin: 0;
   color: var(--muted);
+}
+
+.booking-contact-link {
+  color: var(--primary-dark);
+  text-decoration: underline;
+  text-underline-offset: 0.2rem;
 }
 
 .booking-detail-section {

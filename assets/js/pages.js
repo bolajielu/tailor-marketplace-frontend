@@ -1451,7 +1451,7 @@ if (pageKey === 'dashboard') {
                     <div class="dashboard-role-actions">
                       ${
                         bookingDetailHref
-                          ? `<a class="button button-secondary dashboard-role-link dashboard-booking-detail-button" href="${bookingDetailHref}">View booking details</a>`
+                          ? `<a class="button button-primary dashboard-role-link dashboard-booking-detail-button" href="${bookingDetailHref}">View booking details</a>`
                           : '<p class="dashboard-section-note">Booking ID missing, so detail link is unavailable.</p>'
                       }
                     </div>
@@ -2451,7 +2451,7 @@ if (pageKey === 'booking-detail') {
   };
 
   // Render one booking record using the most useful enriched fields.
-  const renderBookingDetail = (bookingData) => {
+  const renderBookingDetail = (bookingData, viewerRole = 'customer') => {
     const bookingId = getFirstFilledValue(bookingData, ['booking_id', 'id', 'bookingId']) || 'Not available';
     const serviceRequested = getFirstFilledValue(bookingData, ['service_requested', 'service', 'request']) || 'Not provided';
     const measurements = getFirstFilledValue(bookingData, ['measurements', 'measurement_notes', 'notes']) || 'Not provided';
@@ -2464,10 +2464,21 @@ if (pageKey === 'booking-detail') {
     const cancellationReason = getFirstFilledValue(bookingData, ['cancellation_reason', 'cancel_reason']);
     const priceQuote = getFirstFilledValue(bookingData, ['price_quote', 'quoted_price']);
     const finalPrice = getFirstFilledValue(bookingData, ['final_price', 'completed_price']);
-    const tailorName = getFirstFilledValue(bookingData, ['tailor_name', 'tailor']) || getNestedValue(bookingData, 'tailor.name') || 'Not provided';
-    const tailorBusinessName = getFirstFilledValue(bookingData, ['tailor_business_name', 'business_name', 'shop_name'])
-      || getNestedValue(bookingData, 'tailor.business_name')
+    const tailorBusinessName = getNestedValue(bookingData, 'tailor.business_name')
+      || getNestedValue(bookingData, 'tailor.shop_name')
+      || getFirstFilledValue(bookingData, ['tailor_business_name', 'business_name', 'shop_name', 'tailor_name', 'tailor'])
       || 'Not provided';
+    const tailorEmail = getNestedValue(bookingData, 'tailor.email')
+      || getFirstFilledValue(bookingData, ['tailor_email'])
+      || 'Not provided';
+    const tailorPhone = getNestedValue(bookingData, 'tailor.phone_number')
+      || getNestedValue(bookingData, 'tailor.phone')
+      || getNestedValue(bookingData, 'tailor.mobile')
+      || getFirstFilledValue(bookingData, ['tailor_phone_number', 'tailor_phone'])
+      || 'Not provided';
+    const tailorWhatsapp = getNestedValue(bookingData, 'tailor.whatsapp_link')
+      || getNestedValue(bookingData, 'tailor.whatsapp')
+      || getFirstFilledValue(bookingData, ['tailor_whatsapp_link', 'tailor_whatsapp']);
     // Keep customer details sourced from enriched user response objects.
     // We do not read duplicated customer profile fields from the booking table.
     const customerName = getNestedValue(bookingData, 'customer.name')
@@ -2478,6 +2489,12 @@ if (pageKey === 'booking-detail') {
     const customerEmail = getNestedValue(bookingData, 'customer.email')
       || getNestedValue(bookingData, 'user.email')
       || 'Not provided';
+    const customerPhone = getNestedValue(bookingData, 'customer.phone_number')
+      || getNestedValue(bookingData, 'customer.phone')
+      || getNestedValue(bookingData, 'customer.mobile')
+      || getNestedValue(bookingData, 'user.phone_number')
+      || getNestedValue(bookingData, 'user.phone')
+      || 'Not provided';
     const hasReviewRaw = bookingData && (bookingData.has_review ?? bookingData.hasReview);
     const hasReview = hasReviewRaw === undefined || hasReviewRaw === null
       ? 'Not provided'
@@ -2486,6 +2503,37 @@ if (pageKey === 'booking-detail') {
         : 'No';
     const inspirationImage = getFirstFilledValue(bookingData, ['inspiration_image_upload', 'inspiration_image', 'inspiration_image_url']);
     const inspirationImageSafeUrl = inspirationImage && /^https?:\/\//i.test(inspirationImage.trim()) ? inspirationImage.trim() : '';
+    const tailorWhatsappSafeUrl = tailorWhatsapp && /^https?:\/\//i.test(tailorWhatsapp.trim()) ? tailorWhatsapp.trim() : '';
+
+    // Keep this card role-aware:
+    // - customer sees tailor contact details
+    // - tailor sees customer contact details
+    const rightSideCardTitle = viewerRole === 'tailor' ? 'Customer contact details' : 'Tailor contact details';
+    const rightSideCardBody = viewerRole === 'tailor'
+      ? `
+        <dl class="booking-detail-meta">
+          <div><dt>Customer name</dt><dd>${escapeHtml(customerName)}</dd></div>
+          <div><dt>Customer email</dt><dd>${escapeHtml(customerEmail)}</dd></div>
+          <div><dt>Customer phone number</dt><dd>${escapeHtml(customerPhone)}</dd></div>
+        </dl>
+      `
+      : `
+        <dl class="booking-detail-meta">
+          <div><dt>Business name</dt><dd>${escapeHtml(tailorBusinessName)}</dd></div>
+          <div><dt>Email</dt><dd>${escapeHtml(tailorEmail)}</dd></div>
+          <div><dt>Phone number</dt><dd>${escapeHtml(tailorPhone)}</dd></div>
+          <div>
+            <dt>WhatsApp</dt>
+            <dd>
+              ${
+                tailorWhatsappSafeUrl
+                  ? `<a class="booking-contact-link" href="${escapeHtml(tailorWhatsappSafeUrl)}" target="_blank" rel="noopener noreferrer">Open WhatsApp chat</a>`
+                  : 'Not provided'
+              }
+            </dd>
+          </div>
+        </dl>
+      `;
 
     return `
       <div class="booking-detail-grid">
@@ -2508,14 +2556,9 @@ if (pageKey === 'booking-detail') {
           </dl>
         </section>
 
-        <section class="booking-detail-group" aria-label="Tailor and customer info">
-          <h3>People involved</h3>
-          <dl class="booking-detail-meta">
-            <div><dt>Tailor name</dt><dd>${escapeHtml(tailorName)}</dd></div>
-            <div><dt>Tailor business</dt><dd>${escapeHtml(tailorBusinessName)}</dd></div>
-            <div><dt>Customer name</dt><dd>${escapeHtml(customerName)}</dd></div>
-            <div><dt>Customer email</dt><dd>${escapeHtml(customerEmail)}</dd></div>
-          </dl>
+        <section class="booking-detail-group booking-contact-group" aria-label="Role based contact info">
+          <h3>${escapeHtml(rightSideCardTitle)}</h3>
+          ${rightSideCardBody}
         </section>
       </div>
 
@@ -2629,7 +2672,7 @@ if (pageKey === 'booking-detail') {
         title: 'Booking detail loaded successfully.',
         description: `This page is now showing enriched booking information from ${detailEndpointLabel}.`,
         cardTitle: `Booking #${getFirstFilledValue(bookingData, ['booking_id', 'id', 'bookingId']) || bookingId}`,
-        cardBody: renderBookingDetail(bookingData),
+        cardBody: renderBookingDetail(bookingData, currentUserRole),
         stateClass: 'is-success',
       });
     } catch (error) {
@@ -2714,7 +2757,10 @@ if (pageKey === 'bookings') {
         const status = getFirstFilledValue(bookingItem, ['status', 'booking_status', 'state']) || 'Pending update';
         const serviceRequested = getFirstFilledValue(bookingItem, ['service_requested', 'service', 'request']) || 'Service not provided';
         const submittedAtRaw = getFirstFilledValue(bookingItem, ['created_at', 'createdAt']);
-        const tailorName = getFirstFilledValue(bookingItem, ['tailor_name', 'tailor', 'business_name', 'shop_name']) || 'Tailor name not available';
+        const tailorBusinessName = getFirstFilledValue(
+          bookingItem,
+          ['tailor_business_name', 'business_name', 'shop_name', 'tailor_name', 'tailor']
+        ) || 'Business name not available';
         const bookingId = getFirstFilledValue(bookingItem, ['booking_id', 'id', 'bookingId']) || 'N/A';
         const detailHref = bookingId && bookingId !== 'N/A' ? `booking-detail.html?bookingId=${encodeURIComponent(bookingId)}` : '';
 
@@ -2733,8 +2779,8 @@ if (pageKey === 'bookings') {
                 <dd>${escapeHtml(serviceRequested)}</dd>
               </div>
               <div>
-                <dt>Tailor</dt>
-                <dd>${escapeHtml(tailorName)}</dd>
+                <dt>Business name</dt>
+                <dd>${escapeHtml(tailorBusinessName)}</dd>
               </div>
               <div>
                 <dt>Booking submitted</dt>
@@ -2744,7 +2790,7 @@ if (pageKey === 'bookings') {
             <div class="bookings-list-actions">
               ${
                 detailHref
-                  ? `<a class="button button-secondary bookings-detail-button" href="${detailHref}" data-booking-id="${escapeHtml(bookingId)}">View booking details</a>`
+                  ? `<a class="button button-primary bookings-detail-button" href="${detailHref}" data-booking-id="${escapeHtml(bookingId)}">View booking details</a>`
                   : '<p class="bookings-list-link-note">Booking ID missing, so detail link is unavailable.</p>'
               }
             </div>
