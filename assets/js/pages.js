@@ -174,6 +174,47 @@ const getFirstFilledValue = (record, fieldNames) => {
   return '';
 };
 
+// Return a safe image URL string or an empty string when the value cannot be
+// used in an <img> element. Xano image fields may return either:
+// - a string URL
+// - an object that includes url, image, src, or path
+// Keeping this helper shared lets listing and detail pages follow the same
+// beginner-friendly image handling logic.
+const getSafeImageUrl = (value) => {
+  let possibleUrl = '';
+
+  // Handle direct string URLs such as "https://...".
+  if (typeof value === 'string') {
+    possibleUrl = value.trim();
+  }
+
+  // Handle common Xano image object shapes such as:
+  // { url: "..." }, { image: "..." }, { src: "..." }, or { path: "..." }.
+  if (!possibleUrl && value && typeof value === 'object') {
+    const objectUrlValue = value.url || value.image || value.src || value.path || '';
+
+    if (typeof objectUrlValue === 'string') {
+      possibleUrl = objectUrlValue.trim();
+    }
+  }
+
+  if (!possibleUrl) {
+    return '';
+  }
+
+  try {
+    const parsedUrl = new URL(possibleUrl, window.location.origin);
+
+    if (parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:') {
+      return parsedUrl.href;
+    }
+  } catch (error) {
+    return '';
+  }
+
+  return '';
+};
+
 // Read the most helpful display name that exists in the current user object.
 // Xano responses can vary, so this helper checks a few common field names.
 const getUserDisplayName = (userData) => {
@@ -1997,7 +2038,17 @@ if (pageKey === 'tailors') {
       'This tailor was loaded from the live directory. Add more profile fields in Xano to show more detail here.';
     const bioPreview = createBioPreview(bioFull);
     const ratingLabel = getRatingLabel(tailor);
-    const profileImageUrl = getFirstFilledValue(tailor, ['profile_picture', 'profile_image', 'photo', 'image', 'avatar']);
+    // Profile image fields can be URL strings or Xano image objects.
+    // We first read the first available field, then normalize it safely.
+    const rawProfileImageValue = tailor && (
+      tailor.profile_picture
+      || tailor.profile_image
+      || tailor.photo
+      || tailor.image
+      || tailor.avatar
+      || ''
+    );
+    const profileImageUrl = getSafeImageUrl(rawProfileImageValue);
     const tailorId = getFirstFilledValue(tailor, ['id', 'tailor_id', 'tailorId']);
 
     return {
@@ -2203,44 +2254,6 @@ if (pageKey === 'tailor-detail') {
       <h2 id="tailor-detail-title">${escapeHtml(cardTitle)}</h2>
       ${cardBody}
     `;
-  };
-
-  // Return a safe image URL string or an empty string when the value cannot be
-  // used in an <img> element. Xano image fields may return a string URL or an
-  // object, so this helper reads both formats in one easy-to-follow place.
-  const getSafeImageUrl = (value) => {
-    let possibleUrl = '';
-
-    // Handle direct string URLs such as "https://...".
-    if (typeof value === 'string') {
-      possibleUrl = value.trim();
-    }
-
-    // Handle common Xano image object shapes such as:
-    // { url: "..." }, { image: "..." }, { src: "..." }, or { path: "..." }.
-    if (!possibleUrl && value && typeof value === 'object') {
-      const objectUrlValue = value.url || value.image || value.src || value.path || '';
-
-      if (typeof objectUrlValue === 'string') {
-        possibleUrl = objectUrlValue.trim();
-      }
-    }
-
-    if (!possibleUrl) {
-      return '';
-    }
-
-    try {
-      const parsedUrl = new URL(possibleUrl, window.location.origin);
-
-      if (parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:') {
-        return parsedUrl.href;
-      }
-    } catch (error) {
-      return '';
-    }
-
-    return '';
   };
 
   // Read an array field safely. If Xano sends a non-array value, return [] so
