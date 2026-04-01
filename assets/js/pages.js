@@ -2472,6 +2472,8 @@ if (pageKey === 'booking-detail') {
   const detailStatusPanel = document.querySelector('#booking-detail-status-panel');
   const detailCard = document.querySelector('#booking-detail-card');
   const apiHelpers = window.TailorMarketplaceApi;
+  let currentViewerRole = 'customer';
+  let currentBookingId = '';
 
   // Read bookingId from the expected query string key:
   // booking-detail.html?bookingId=12
@@ -2600,6 +2602,85 @@ if (pageKey === 'booking-detail') {
         </dl>
       `;
 
+    const statusValue = getFirstFilledValue(bookingData, ['status', 'booking_status', 'state']);
+    const appointmentValue = getFirstFilledValue(bookingData, ['appointment_datetime', 'appointment_at', 'appointment_date', 'appointmentDate']);
+    const dueDateValue = getFirstFilledValue(bookingData, ['due_date', 'dueDate']);
+
+    // Convert API date values into form-friendly input values.
+    // datetime-local expects format like "2026-04-01T14:30".
+    const formatDateTimeForInput = (dateValue) => {
+      const parsedDate = parsePossibleDate(dateValue);
+
+      if (!parsedDate) {
+        return '';
+      }
+
+      const localDate = new Date(parsedDate.getTime() - (parsedDate.getTimezoneOffset() * 60000));
+      return localDate.toISOString().slice(0, 16);
+    };
+
+    // date input expects format like "2026-04-10".
+    const formatDateForInput = (dateValue) => {
+      const parsedDate = parsePossibleDate(dateValue);
+
+      if (!parsedDate) {
+        return '';
+      }
+
+      const localDate = new Date(parsedDate.getTime() - (parsedDate.getTimezoneOffset() * 60000));
+      return localDate.toISOString().slice(0, 10);
+    };
+
+    const manageSectionMarkup = viewerRole === 'tailor'
+      ? `
+        <section class="booking-detail-group booking-manage-group" aria-label="Manage booking">
+          <h3>Manage Booking</h3>
+          <p class="booking-manage-copy">
+            As the assigned tailor, you can update the booking status, appointment date/time, and due date.
+          </p>
+          <form id="booking-manage-form" class="login-form booking-manage-form" novalidate>
+            <div class="form-field">
+              <label for="manage-booking-status">Status</label>
+              <select id="manage-booking-status" name="status" required>
+                ${['pending', 'confirmed', 'in_progress', 'completed', 'cancelled']
+                  .map(
+                    (statusOption) => `
+                      <option value="${escapeHtml(statusOption)}" ${statusValue.toLowerCase() === statusOption ? 'selected' : ''}>
+                        ${escapeHtml(statusOption.replaceAll('_', ' '))}
+                      </option>
+                    `,
+                  )
+                  .join('')}
+              </select>
+            </div>
+
+            <div class="form-field">
+              <label for="manage-booking-appointment">Appointment date and time (optional)</label>
+              <input
+                id="manage-booking-appointment"
+                name="appointment_datetime"
+                type="datetime-local"
+                value="${escapeHtml(formatDateTimeForInput(appointmentValue))}"
+              />
+            </div>
+
+            <div class="form-field">
+              <label for="manage-booking-due-date">Due date (optional)</label>
+              <input
+                id="manage-booking-due-date"
+                name="due_date"
+                type="date"
+                value="${escapeHtml(formatDateForInput(dueDateValue))}"
+              />
+            </div>
+
+            <p id="booking-manage-message" class="validation-message">Use this form to update booking lifecycle fields.</p>
+            <button id="booking-manage-submit" class="button button-primary" type="submit">Save booking updates</button>
+          </form>
+        </section>
+      `
+      : '';
+
     return `
       <div class="booking-detail-grid">
         <section class="booking-detail-group" aria-label="Booking summary">
@@ -2635,11 +2716,105 @@ if (pageKey === 'booking-detail') {
             : '<p class="booking-detail-empty-text">No inspiration image was provided for this booking.</p>'
         }
       </section>
+
+      ${manageSectionMarkup}
     `;
+  };
+
+  // Turn optional form fields into values safe for the update request payload.
+  const readOptionalFieldValue = (rawValue) => {
+    if (rawValue === undefined || rawValue === null) {
+      return null;
+    }
+
+    const trimmedValue = String(rawValue).trim();
+    return trimmedValue ? trimmedValue : null;
+  };
+
+  // Attach form behavior after the tailor detail markup is in the DOM.
+  const setupTailorManageBookingForm = ({ bookingId }) => {
+    const manageForm = document.querySelector('#booking-manage-form');
+
+    if (!manageForm) {
+      return;
+    }
+
+    const manageMessage = document.querySelector('#booking-manage-message');
+    const manageSubmitButton = document.querySelector('#booking-manage-submit');
+    const statusField = document.querySelector('#manage-booking-status');
+    const appointmentField = document.querySelector('#manage-booking-appointment');
+    const dueDateField = document.querySelector('#manage-booking-due-date');
+
+    const updateManageMessage = (message, stateClass = '') => {
+      manageMessage.textContent = message;
+      manageMessage.className = `validation-message ${stateClass}`.trim();
+    };
+
+    manageForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+
+      if (!statusField.value.trim()) {
+        updateManageMessage('Please choose a booking status before saving.', 'is-error');
+        return;
+      }
+
+      const updatePayload = {
+        status: statusField.value.trim(),
+        appointment_datetime: readOptionalFieldValue(appointmentField.value),
+        due_date: readOptionalFieldValue(dueDateField.value),
+      };
+
+      updateManageMessage('Saving booking updates...', 'is-loading');
+      manageSubmitButton.disabled = true;
+
+      try {
+        const updateResult = await apiHelpers.updateTailorBookingById(bookingId, updatePayload);
+
+        if (apiHelpers.isUnauthorizedResponse(updateResult)) {
+          updateManageMessage('Your session expired. Redirecting to login...', 'is-error');
+
+          setTimeout(() => {
+            apiHelpers.clearAuthToken();
+            apiHelpers.redirectToLoginPage('..');
+          }, 900);
+          return;
+        }
+
+        if (!updateResult.ok) {
+          updateManageMessage(updateResult.errorMessage || 'We could not save booking updates right now.', 'is-error');
+          return;
+        }
+
+        updateManageMessage('Booking updated successfully. Refreshing detail view...', 'is-success');
+
+        // Re-fetch and re-render the booking so summary values match the new data.
+        const refreshedResult = await apiHelpers.getTailorBookingById(bookingId);
+
+        if (refreshedResult.ok && refreshedResult.data) {
+          updateDetailState({
+            title: 'Booking detail updated successfully.',
+            description: 'Your tailor updates were saved and this page now shows the latest booking values.',
+            cardTitle: `Booking #${getFirstFilledValue(refreshedResult.data, ['booking_id', 'id', 'bookingId']) || bookingId}`,
+            cardBody: renderBookingDetail(refreshedResult.data, currentViewerRole),
+            stateClass: 'is-success',
+          });
+
+          setupTailorManageBookingForm({ bookingId });
+          return;
+        }
+
+        updateManageMessage('Saved updates, but we could not refresh the detail view automatically.', 'is-success');
+      } catch (error) {
+        updateManageMessage('Network error while saving. Please try again.', 'is-error');
+      } finally {
+        manageSubmitButton.disabled = false;
+      }
+    });
   };
 
   (async () => {
     const bookingId = getBookingIdFromUrl();
+    currentBookingId = bookingId;
 
     if (!bookingId) {
       updateDetailState({
@@ -2686,6 +2861,7 @@ if (pageKey === 'booking-detail') {
       }
 
       const currentUserRole = getUserRole(currentUserResult.data);
+      currentViewerRole = currentUserRole || 'customer';
 
       if (currentUserRole === 'tailor') {
         detailRequestHelper = apiHelpers.getTailorBookingById;
@@ -2740,6 +2916,10 @@ if (pageKey === 'booking-detail') {
         cardBody: renderBookingDetail(bookingData, currentUserRole),
         stateClass: 'is-success',
       });
+
+      if (currentViewerRole === 'tailor') {
+        setupTailorManageBookingForm({ bookingId: currentBookingId });
+      }
     } catch (error) {
       updateDetailState({
         title: 'Network error while loading booking detail.',
