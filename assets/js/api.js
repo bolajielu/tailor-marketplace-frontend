@@ -43,6 +43,7 @@ const API_ENDPOINTS = {
   tailorBookings: {
     bookings: '/get_tailor_bookings',
     bookingDetail: '/get_tailor_booking',
+    updateBooking: '/update_tailor_booking',
   },
 };
 
@@ -350,6 +351,24 @@ const getTailorBookingById = (bookingId) => {
   const queryString = buildQueryString({ booking_id: bookingId });
   return authenticatedRequest('tailorBookings', `${API_ENDPOINTS.tailorBookings.bookingDetail}${queryString}`, { method: 'GET' });
 };
+/*
+  Update one booking as a signed-in tailor.
+
+  Endpoint used:
+  - PATCH /update_tailor_booking?booking_id=<id>
+
+  Why this helper exists:
+  - pages.js should not hardcode update endpoint paths.
+  - booking ID query string logic stays centralized in api.js.
+  - beginner-friendly pages can call one clear function name.
+*/
+const updateTailorBookingById = (bookingId, updateFields = {}) => {
+  const queryString = buildQueryString({ booking_id: bookingId });
+  return authenticatedRequest('tailorBookings', `${API_ENDPOINTS.tailorBookings.updateBooking}${queryString}`, {
+    method: 'PATCH',
+    body: JSON.stringify(updateFields),
+  });
+};
 
 const getUserReviews = () => authenticatedRequest('users', API_ENDPOINTS.users.reviews, { method: 'GET' });
 const updateUserProfile = (profileData) => authenticatedRequest('users', API_ENDPOINTS.users.profile, {
@@ -397,6 +416,7 @@ window.TailorMarketplaceApi = {
   getBookingById,
   getTailorBookings,
   getTailorBookingById,
+  updateTailorBookingById,
   getUserReviews,
   updateUserProfile,
   getBookings,

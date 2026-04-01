@@ -307,6 +307,22 @@ button {
   border-color: var(--primary);
 }
 
+.form-field select {
+  width: 100%;
+  min-height: 3rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: #fff;
+  color: var(--text);
+  font: inherit;
+}
+
+.form-field select:focus {
+  outline: 2px solid rgba(31, 111, 235, 0.18);
+  border-color: var(--primary);
+}
+
 .form-field textarea {
   width: 100%;
   min-height: 7.5rem;
@@ -351,6 +367,11 @@ button {
 .validation-message.is-success {
   background: #dcfce7;
   color: #166534;
+}
+
+.validation-message.is-loading {
+  background: #dbeafe;
+  color: #1d4ed8;
 }
 
 .login-submit {
@@ -977,6 +998,20 @@ button {
   margin: 0.85rem 0 0;
   display: grid;
   gap: 0.75rem;
+}
+
+.booking-manage-group {
+  margin-top: 1rem;
+}
+
+.booking-manage-copy {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.booking-manage-form {
+  margin-top: 0.25rem;
 }
 
 .bookings-list-meta div {
