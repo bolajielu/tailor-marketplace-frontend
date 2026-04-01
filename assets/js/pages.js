@@ -1951,30 +1951,63 @@ if (pageKey === 'tailors') {
       .replaceAll("'", '&#39;');
   };
 
+  // Keep this helper short and easy to follow:
+  // it trims long bios so listing cards stay clean and easy to scan.
+  const createBioPreview = (bioText, maxLength = 140) => {
+    const safeBio = String(bioText || '').trim();
+
+    if (!safeBio) {
+      return 'No bio added yet. Open the profile page to see more tailor details.';
+    }
+
+    if (safeBio.length <= maxLength) {
+      return safeBio;
+    }
+
+    return `${safeBio.slice(0, maxLength).trimEnd()}...`;
+  };
+
+  // Keep rating display honest:
+  // - If a real rating value exists, show it.
+  // - If not, show a neutral fallback.
+  const getRatingLabel = (tailor) => {
+    const rawRating = getFirstFilledValue(tailor, ['rating', 'average_rating', 'avg_rating', 'stars', 'score']);
+
+    if (!rawRating) {
+      return 'No ratings yet';
+    }
+
+    const numericRating = Number(rawRating);
+
+    if (!Number.isNaN(numericRating)) {
+      return `${numericRating.toFixed(1)} / 5`;
+    }
+
+    return rawRating;
+  };
+
   // Keep the card display beginner-friendly by mapping common tailor fields
   // into one consistent object the UI can render.
   const mapTailorToCardData = (tailor, index) => {
     const name = getFirstFilledValue(tailor, ['business_name', 'shop_name', 'name', 'full_name', 'fullName']) || `Tailor ${index + 1}`;
-    const specialty =
-      getFirstFilledValue(tailor, ['specialty', 'speciality', 'service_type', 'category', 'focus']) || 'General tailoring services';
     const location = getFirstFilledValue(tailor, ['location', 'city', 'address', 'region']);
-    const experience = getFirstFilledValue(tailor, ['experience', 'years_experience', 'yearsExperience']);
-    const phone = getFirstFilledValue(tailor, ['phone', 'phone_number', 'phoneNumber']);
     const email = getFirstFilledValue(tailor, ['email', 'contact_email', 'contactEmail']);
-    const bio =
+    const bioFull =
       getFirstFilledValue(tailor, ['bio', 'about', 'description']) ||
       'This tailor was loaded from the live directory. Add more profile fields in Xano to show more detail here.';
+    const bioPreview = createBioPreview(bioFull);
+    const ratingLabel = getRatingLabel(tailor);
+    const profileImageUrl = getFirstFilledValue(tailor, ['profile_picture', 'profile_image', 'photo', 'image', 'avatar']);
     const tailorId = getFirstFilledValue(tailor, ['id', 'tailor_id', 'tailorId']);
 
     return {
       tailorId,
       name,
-      specialty,
       location,
-      experience,
-      phone,
       email,
-      bio,
+      bioPreview,
+      ratingLabel,
+      profileImageUrl,
     };
   };
 
@@ -1994,19 +2027,32 @@ if (pageKey === 'tailors') {
   const renderTailorCard = (tailor, index) => {
     const cardData = mapTailorToCardData(tailor, index);
     const detailHref = cardData.tailorId ? `tailor-detail.html?tailorId=${encodeURIComponent(cardData.tailorId)}` : '';
+    const imageMarkup = cardData.profileImageUrl
+      ? `
+        <img
+          class="tailor-card-image"
+          src="${escapeHtml(cardData.profileImageUrl)}"
+          alt="${escapeHtml(`${cardData.name} profile picture`)}"
+          loading="lazy"
+        />
+      `
+      : '<div class="tailor-card-image-placeholder">No photo yet</div>';
 
     return `
       <article class="feature-card tailor-card">
-        <span class="panel-label">Tailor ${index + 1}</span>
-        <h3>${escapeHtml(cardData.name)}</h3>
-        <p class="tailor-card-specialty">${escapeHtml(cardData.specialty)}</p>
-        <p class="tailor-card-bio">${escapeHtml(cardData.bio)}</p>
+        <div class="tailor-card-image-wrap">
+          ${imageMarkup}
+        </div>
+        <div class="tailor-card-header">
+          <span class="panel-label">Tailor ${index + 1}</span>
+          <h3>${escapeHtml(cardData.name)}</h3>
+        </div>
         <ul class="tailor-card-meta">
           ${renderTailorMetaItem('Location', cardData.location)}
-          ${renderTailorMetaItem('Experience', cardData.experience)}
-          ${renderTailorMetaItem('Phone', cardData.phone)}
+          ${renderTailorMetaItem('Rating', cardData.ratingLabel)}
           ${renderTailorMetaItem('Email', cardData.email)}
         </ul>
+        <p class="tailor-card-bio">${escapeHtml(cardData.bioPreview)}</p>
         ${
           detailHref
             ? `<a class="button button-secondary tailor-card-link" href="${detailHref}">View full profile</a>`
@@ -2254,11 +2300,13 @@ if (pageKey === 'tailor-detail') {
 
   const renderTailorDetail = (tailorData) => {
     // Align this page with the real tailor table schema from Xano.
-    const businessName = getFirstFilledValue(tailorData, ['business_name']) || 'Tailor profile';
-    const location = getFirstFilledValue(tailorData, ['location']) || 'Location not added yet';
-    const bio = getFirstFilledValue(tailorData, ['bio']) || 'No bio has been added yet.';
-    const priceRange = getFirstFilledValue(tailorData, ['price_range']) || 'Price range not listed';
-    const turnaroundTime = getFirstFilledValue(tailorData, ['turnaround_time']) || 'Turnaround time not listed';
+    const businessName = getFirstFilledValue(tailorData, ['business_name', 'shop_name', 'name']) || 'Tailor profile';
+    const location = getFirstFilledValue(tailorData, ['location', 'city', 'address', 'region']) || 'Location not added yet';
+    const bio = getFirstFilledValue(tailorData, ['bio', 'about', 'description']) || 'No bio has been added yet.';
+    const priceRange = getFirstFilledValue(tailorData, ['price_range', 'priceRange']) || 'Price range not listed';
+    const turnaroundTime = getFirstFilledValue(tailorData, ['turnaround_time', 'turnaroundTime']) || 'Turnaround time not listed';
+    const email = getFirstFilledValue(tailorData, ['email', 'contact_email', 'contactEmail']) || 'Email not listed';
+    const phoneNumber = getFirstFilledValue(tailorData, ['phone_number', 'phone', 'phoneNumber']) || 'Phone number not listed';
     const whatsappLinkRaw = getFirstFilledValue(tailorData, ['whatsapp_link']);
     const tailorId = getFirstFilledValue(tailorData, ['id', 'tailor_id', 'tailorId']);
     const profileImageUrl = getSafeImageUrl(tailorData && tailorData.profile_picture);
@@ -2323,6 +2371,10 @@ if (pageKey === 'tailor-detail') {
 
         <section class="tailor-detail-group" aria-label="Contact">
           <h3>Contact</h3>
+          <dl class="tailor-detail-meta">
+            ${renderMetaRow('Email', email)}
+            ${renderMetaRow('Phone number', phoneNumber)}
+          </dl>
           ${contactMarkup}
           <a class="button button-secondary tailor-booking-link" href="${bookingLink}">Book this tailor</a>
         </section>
