@@ -370,6 +370,47 @@ const updateTailorBookingById = (bookingId, updateFields = {}) => {
   });
 };
 
+/*
+  Confirm booking completion as a signed-in customer.
+
+  Current MVP behavior:
+  - Uses the existing authenticated customer booking endpoint path.
+  - Sends completion confirmation fields in a PATCH payload.
+  - This is a frontend helper and can be redirected to a dedicated endpoint
+    later without changing page-level UI code.
+*/
+const confirmBookingCompletion = (bookingId) => {
+  const queryString = buildQueryString({ booking_id: bookingId });
+
+  return authenticatedRequest('users', `${API_ENDPOINTS.users.bookingDetail}${queryString}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      completion_confirmation_status: 'confirmed',
+      completion_confirmed_at: new Date().toISOString(),
+    }),
+  });
+};
+
+/*
+  Placeholder helper for customer disputes.
+
+  Why this stays simple for now:
+  - The full dispute workflow is intentionally out of scope for this MVP.
+  - The UI can call this helper now and later switch to a dedicated dispute
+    endpoint without rewriting page logic.
+*/
+const disputeBooking = (bookingId) => {
+  const queryString = buildQueryString({ booking_id: bookingId });
+
+  return authenticatedRequest('users', `${API_ENDPOINTS.users.bookingDetail}${queryString}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      completion_confirmation_status: 'disputed',
+      disputed_at: new Date().toISOString(),
+    }),
+  });
+};
+
 const getUserReviews = () => authenticatedRequest('users', API_ENDPOINTS.users.reviews, { method: 'GET' });
 const updateUserProfile = (profileData) => authenticatedRequest('users', API_ENDPOINTS.users.profile, {
   method: 'PATCH',
@@ -417,6 +458,8 @@ window.TailorMarketplaceApi = {
   getTailorBookings,
   getTailorBookingById,
   updateTailorBookingById,
+  confirmBookingCompletion,
+  disputeBooking,
   getUserReviews,
   updateUserProfile,
   getBookings,

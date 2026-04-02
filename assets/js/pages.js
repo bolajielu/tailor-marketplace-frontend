@@ -2638,7 +2638,12 @@ if (pageKey === 'booking-detail') {
           <p class="booking-manage-copy">
             As the assigned tailor, you can update the booking status, appointment date/time, and due date.
           </p>
-          <form id="booking-manage-form" class="login-form booking-manage-form" novalidate>
+          <form
+            id="booking-manage-form"
+            class="login-form booking-manage-form"
+            data-current-completion-date="${escapeHtml(completionDateRaw || '')}"
+            novalidate
+          >
             <div class="form-field">
               <label for="manage-booking-status">Status</label>
               <select id="manage-booking-status" name="status" required>
@@ -2681,6 +2686,64 @@ if (pageKey === 'booking-detail') {
       `
       : '';
 
+    // Completion confirmation state:
+    // - Tailor marks booking as completed.
+    // - Customer can then confirm or dispute.
+    // - Auto-confirm timeout logic is intentionally not added in this MVP.
+    const completionStatusValue = getFirstFilledValue(bookingData, ['completion_confirmation_status', 'completion_status']);
+    const completionConfirmedAtValue = getFirstFilledValue(bookingData, ['completion_confirmed_at', 'confirmed_completion_at']);
+    const completionDisputedAtValue = getFirstFilledValue(bookingData, ['disputed_at', 'completion_disputed_at']);
+    const completionConfirmedFlag = String(
+      bookingData && (
+        bookingData.completion_confirmed
+        ?? bookingData.is_completion_confirmed
+        ?? bookingData.confirmed_completion
+      ),
+    ).toLowerCase();
+    const completionDisputedFlag = String(
+      bookingData && (
+        bookingData.completion_disputed
+        ?? bookingData.is_completion_disputed
+      ),
+    ).toLowerCase();
+    const normalizedBookingStatus = String(bookingStatus).trim().toLowerCase();
+    const normalizedCompletionStatus = String(completionStatusValue).trim().toLowerCase();
+    const isCompletedBooking = normalizedBookingStatus === 'completed';
+    const isCompletionConfirmed = normalizedCompletionStatus === 'confirmed'
+      || Boolean(completionConfirmedAtValue)
+      || completionConfirmedFlag === 'true'
+      || completionConfirmedFlag === '1';
+    const isCompletionDisputed = normalizedCompletionStatus === 'disputed'
+      || Boolean(completionDisputedAtValue)
+      || completionDisputedFlag === 'true'
+      || completionDisputedFlag === '1';
+    const needsCustomerCompletionAction = viewerRole === 'customer'
+      && isCompletedBooking
+      && !isCompletionConfirmed
+      && !isCompletionDisputed;
+
+    const completionActionMarkup = needsCustomerCompletionAction
+      ? `
+        <section class="booking-detail-group booking-completion-confirmation-group" aria-label="Completion confirmation">
+          <h3>Completion confirmation required</h3>
+          <p class="booking-manage-copy">
+            Please confirm that this booking was completed successfully.
+          </p>
+          <div class="bookings-list-actions">
+            <button id="booking-confirm-completion-button" class="button button-primary" type="button">
+              Confirm completion
+            </button>
+            <button id="booking-dispute-button" class="button button-secondary" type="button">
+              Report issue
+            </button>
+          </div>
+          <p id="booking-completion-message" class="validation-message">
+            You can confirm completion or report an issue.
+          </p>
+        </section>
+      `
+      : '';
+
     return `
       <div class="booking-detail-grid">
         <section class="booking-detail-group" aria-label="Booking summary">
@@ -2717,6 +2780,7 @@ if (pageKey === 'booking-detail') {
         }
       </section>
 
+      ${completionActionMarkup}
       ${manageSectionMarkup}
     `;
   };
@@ -2758,11 +2822,27 @@ if (pageKey === 'booking-detail') {
         return;
       }
 
+      const nextStatusValue = statusField.value.trim();
       const updatePayload = {
-        status: statusField.value.trim(),
+        status: nextStatusValue,
         appointment_datetime: readOptionalFieldValue(appointmentField.value),
         due_date: readOptionalFieldValue(dueDateField.value),
       };
+
+      // Completion protection MVP:
+      // If tailor marks booking as completed, automatically set completion_date
+      // (only when missing) and mark completion as pending customer confirmation.
+      const isMarkingCompleted = nextStatusValue.toLowerCase() === 'completed';
+
+      if (isMarkingCompleted) {
+        const existingCompletionDate = readOptionalFieldValue(manageForm.dataset.currentCompletionDate);
+
+        if (!existingCompletionDate) {
+          updatePayload.completion_date = new Date().toISOString();
+        }
+
+        updatePayload.completion_confirmation_status = 'pending';
+      }
 
       updateManageMessage('Saving booking updates...', 'is-loading');
       manageSubmitButton.disabled = true;
@@ -2808,6 +2888,86 @@ if (pageKey === 'booking-detail') {
         updateManageMessage('Network error while saving. Please try again.', 'is-error');
       } finally {
         manageSubmitButton.disabled = false;
+      }
+    });
+  };
+
+  // Customer action handlers for the new completion confirmation flow.
+  const setupCustomerCompletionActions = ({ bookingId }) => {
+    const confirmButton = document.querySelector('#booking-confirm-completion-button');
+    const disputeButton = document.querySelector('#booking-dispute-button');
+    const completionMessage = document.querySelector('#booking-completion-message');
+
+    if (!confirmButton || !disputeButton || !completionMessage) {
+      return;
+    }
+
+    const updateCompletionMessage = (message, stateClass = '') => {
+      completionMessage.textContent = message;
+      completionMessage.className = `validation-message ${stateClass}`.trim();
+    };
+
+    const toggleActionButtons = (disabled) => {
+      confirmButton.disabled = disabled;
+      disputeButton.disabled = disabled;
+    };
+
+    confirmButton.addEventListener('click', async () => {
+      updateCompletionMessage('Confirming completion...', 'is-loading');
+      toggleActionButtons(true);
+
+      try {
+        const result = await apiHelpers.confirmBookingCompletion(bookingId);
+
+        if (apiHelpers.isUnauthorizedResponse(result)) {
+          updateCompletionMessage('Your session expired. Redirecting to login...', 'is-error');
+          setTimeout(() => {
+            apiHelpers.clearAuthToken();
+            apiHelpers.redirectToLoginPage('..');
+          }, 900);
+          return;
+        }
+
+        if (!result.ok) {
+          updateCompletionMessage(result.errorMessage || 'We could not confirm completion right now.', 'is-error');
+          return;
+        }
+
+        updateCompletionMessage('Completion confirmed successfully. Refreshing detail view...', 'is-success');
+        window.setTimeout(() => window.location.reload(), 700);
+      } catch (error) {
+        updateCompletionMessage('Network error while confirming completion. Please try again.', 'is-error');
+      } finally {
+        toggleActionButtons(false);
+      }
+    });
+
+    disputeButton.addEventListener('click', async () => {
+      updateCompletionMessage('Submitting issue report...', 'is-loading');
+      toggleActionButtons(true);
+
+      try {
+        const result = await apiHelpers.disputeBooking(bookingId);
+
+        if (apiHelpers.isUnauthorizedResponse(result)) {
+          updateCompletionMessage('Your session expired. Redirecting to login...', 'is-error');
+          setTimeout(() => {
+            apiHelpers.clearAuthToken();
+            apiHelpers.redirectToLoginPage('..');
+          }, 900);
+          return;
+        }
+
+        if (!result.ok) {
+          updateCompletionMessage(result.errorMessage || 'We could not submit this issue yet.', 'is-error');
+          return;
+        }
+
+        updateCompletionMessage('Issue reported. A dispute workflow can be connected next.', 'is-success');
+      } catch (error) {
+        updateCompletionMessage('Network error while reporting an issue. Please try again.', 'is-error');
+      } finally {
+        toggleActionButtons(false);
       }
     });
   };
@@ -2919,6 +3079,10 @@ if (pageKey === 'booking-detail') {
 
       if (currentViewerRole === 'tailor') {
         setupTailorManageBookingForm({ bookingId: currentBookingId });
+      }
+
+      if (currentViewerRole === 'customer') {
+        setupCustomerCompletionActions({ bookingId: currentBookingId });
       }
     } catch (error) {
       updateDetailState({
