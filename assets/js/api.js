@@ -373,11 +373,11 @@ const updateTailorBookingById = (bookingId, updateFields = {}) => {
 /*
   Confirm booking completion as a signed-in customer.
 
-  Current MVP behavior:
+  Current behavior:
   - Uses the existing authenticated customer booking endpoint path.
-  - Sends completion confirmation fields in a PATCH payload.
-  - This is a frontend helper and can be redirected to a dedicated endpoint
-    later without changing page-level UI code.
+  - Sends only completion_confirmation_status in the PATCH payload.
+  - completion_confirmed_at is system-controlled in Xano and must not be sent
+    by the frontend.
 */
 const confirmBookingCompletion = (bookingId) => {
   const queryString = buildQueryString({ booking_id: bookingId });
@@ -386,18 +386,18 @@ const confirmBookingCompletion = (bookingId) => {
     method: 'PATCH',
     body: JSON.stringify({
       completion_confirmation_status: 'confirmed',
-      completion_confirmed_at: new Date().toISOString(),
     }),
   });
 };
 
 /*
-  Placeholder helper for customer disputes.
+  Customer dispute helper.
 
-  Why this stays simple for now:
-  - The full dispute workflow is intentionally out of scope for this MVP.
-  - The UI can call this helper now and later switch to a dedicated dispute
-    endpoint without rewriting page logic.
+  Current behavior:
+  - Uses the existing authenticated customer booking endpoint path.
+  - Sends only completion_confirmation_status in the PATCH payload.
+  - disputed_at is system-controlled in Xano and must not be sent by the
+    frontend.
 */
 const disputeBooking = (bookingId) => {
   const queryString = buildQueryString({ booking_id: bookingId });
@@ -406,7 +406,6 @@ const disputeBooking = (bookingId) => {
     method: 'PATCH',
     body: JSON.stringify({
       completion_confirmation_status: 'disputed',
-      disputed_at: new Date().toISOString(),
     }),
   });
 };
