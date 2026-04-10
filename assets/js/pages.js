@@ -2795,6 +2795,31 @@ if (pageKey === 'booking-detail') {
     return trimmedValue ? trimmedValue : null;
   };
 
+  // Convert date and datetime-local input values into full ISO UTC strings.
+  // Xano expects timestamps with seconds + timezone (for example: ...:00.000Z).
+  // This keeps empty fields as null and avoids sending partial date values.
+  const formatToIsoUtc = (value) => {
+    const optionalValue = readOptionalFieldValue(value);
+
+    if (!optionalValue) {
+      return null;
+    }
+
+    // date input format: YYYY-MM-DD
+    if (/^\d{4}-\d{2}-\d{2}$/.test(optionalValue)) {
+      return `${optionalValue}T00:00:00.000Z`;
+    }
+
+    // datetime-local input format: YYYY-MM-DDTHH:mm
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(optionalValue)) {
+      const parsedDate = new Date(optionalValue);
+      const isValidDate = !Number.isNaN(parsedDate.getTime());
+      return isValidDate ? parsedDate.toISOString() : null;
+    }
+
+    return null;
+  };
+
   // Attach form behavior after the tailor detail markup is in the DOM.
   const setupTailorManageBookingForm = ({ bookingId }) => {
     const manageForm = document.querySelector('#booking-manage-form');
@@ -2825,8 +2850,8 @@ if (pageKey === 'booking-detail') {
       const nextStatusValue = statusField.value.trim();
       const updatePayload = {
         status: nextStatusValue,
-        appointment_datetime: readOptionalFieldValue(appointmentField.value),
-        due_date: readOptionalFieldValue(dueDateField.value),
+        appointment_datetime: formatToIsoUtc(appointmentField.value),
+        due_date: formatToIsoUtc(dueDateField.value),
       };
 
       // Completion protection MVP:
