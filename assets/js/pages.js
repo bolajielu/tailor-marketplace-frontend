@@ -310,6 +310,41 @@ const formatDisplayDateTime = (dateValue, fallbackText = 'Not available') => {
   });
 };
 
+// Format due_date values that are stored as plain YYYY-MM-DD text.
+// This avoids timezone shifting because we do not parse it as an ISO timestamp.
+const formatDueDateForDisplay = (dueDateValue, fallbackText = 'Not available') => {
+  if (typeof dueDateValue !== 'string') {
+    return fallbackText;
+  }
+
+  const trimmedDueDate = dueDateValue.trim();
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmedDueDate)) {
+    return fallbackText;
+  }
+
+  const [yearText, monthText, dayText] = trimmedDueDate.split('-');
+  const year = Number(yearText);
+  const monthIndex = Number(monthText) - 1;
+  const day = Number(dayText);
+  const safeDate = new Date(year, monthIndex, day);
+
+  if (
+    Number.isNaN(safeDate.getTime())
+    || safeDate.getFullYear() !== year
+    || safeDate.getMonth() !== monthIndex
+    || safeDate.getDate() !== day
+  ) {
+    return fallbackText;
+  }
+
+  return safeDate.toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+};
+
 const renderStandardPage = () => `
   <section class="hero-card">
     <div class="hero-copy">
@@ -2619,16 +2654,15 @@ if (pageKey === 'booking-detail') {
       return localDate.toISOString().slice(0, 16);
     };
 
-    // date input expects format like "2026-04-10".
-    const formatDateForInput = (dateValue) => {
-      const parsedDate = parsePossibleDate(dateValue);
-
-      if (!parsedDate) {
+    // due_date input expects plain YYYY-MM-DD text from Xano.
+    // We intentionally keep this raw and do not parse as a timestamp.
+    const formatDueDateForInput = (dueDateValue) => {
+      if (typeof dueDateValue !== 'string') {
         return '';
       }
 
-      const localDate = new Date(parsedDate.getTime() - (parsedDate.getTimezoneOffset() * 60000));
-      return localDate.toISOString().slice(0, 10);
+      const trimmedDueDate = dueDateValue.trim();
+      return /^\d{4}-\d{2}-\d{2}$/.test(trimmedDueDate) ? trimmedDueDate : '';
     };
 
     const manageSectionMarkup = viewerRole === 'tailor'
@@ -2675,7 +2709,7 @@ if (pageKey === 'booking-detail') {
                 id="manage-booking-due-date"
                 name="due_date"
                 type="date"
-                value="${escapeHtml(formatDateForInput(dueDateValue))}"
+                value="${escapeHtml(formatDueDateForInput(dueDateValue))}"
               />
             </div>
 
@@ -2684,7 +2718,8 @@ if (pageKey === 'booking-detail') {
               <input
                 id="manage-booking-price-quote"
                 name="price_quote"
-                type="text"
+                type="number"
+                step="0.01"
                 value="${escapeHtml(priceQuote || '')}"
                 placeholder="Example: 150.00"
               />
@@ -2695,13 +2730,14 @@ if (pageKey === 'booking-detail') {
               <input
                 id="manage-booking-final-price"
                 name="final_price"
-                type="text"
+                type="number"
+                step="0.01"
                 value="${escapeHtml(finalPrice || '')}"
                 placeholder="Example: 175.00"
               />
             </div>
 
-            <div class="form-field" id="manage-booking-cancellation-reason-group" ${statusValue.toLowerCase() === 'cancelled' ? '' : 'hidden'}>
+            <div class="form-field" id="manage-booking-cancellation-reason-group" ${statusValue.toLowerCase() === 'cancelled' ? '' : 'hidden style="display: none;"'}>
               <label for="manage-booking-cancellation-reason">Cancellation reason</label>
               <textarea
                 id="manage-booking-cancellation-reason"
@@ -2787,7 +2823,7 @@ if (pageKey === 'booking-detail') {
             <div><dt>Status</dt><dd>${escapeHtml(bookingStatus)}</dd></div>
             <div><dt>Booking submitted</dt><dd>${escapeHtml(formatDisplayDateTime(createdDateRaw))}</dd></div>
             <div><dt>Appointment</dt><dd>${escapeHtml(formatDisplayDateTime(appointmentRaw))}</dd></div>
-            <div><dt>Due date</dt><dd>${escapeHtml(formatDisplayDate(dueDateRaw))}</dd></div>
+            <div><dt>Due date</dt><dd>${escapeHtml(formatDueDateForDisplay(dueDateRaw))}</dd></div>
             <div><dt>Completion date</dt><dd>${escapeHtml(formatDisplayDate(completionDateRaw))}</dd></div>
             <div><dt>Customer note</dt><dd>${escapeHtml(customerNote || 'Not provided')}</dd></div>
             <div><dt>Has review</dt><dd>${escapeHtml(hasReview)}</dd></div>
@@ -2827,6 +2863,19 @@ if (pageKey === 'booking-detail') {
     return trimmedValue ? trimmedValue : null;
   };
 
+  // Convert optional number inputs into decimal numbers for Xano.
+  // Empty values return null so optional payload fields stay consistent.
+  const readOptionalDecimalNumber = (rawValue) => {
+    const optionalValue = readOptionalFieldValue(rawValue);
+
+    if (!optionalValue) {
+      return null;
+    }
+
+    const parsedNumber = Number(optionalValue);
+    return Number.isFinite(parsedNumber) ? parsedNumber : null;
+  };
+
   // Convert datetime-local input values into full ISO UTC strings.
   // Xano expects timestamps with seconds + timezone (for example: ...:00.000Z).
   // This keeps empty fields as null and avoids sending partial date values.
@@ -2849,7 +2898,7 @@ if (pageKey === 'booking-detail') {
 
   // Keep due_date as plain YYYY-MM-DD text to match the expected booking field format.
   // Empty or invalid values return null so optional handling stays consistent.
-  const formatDueDateText = (value) => {
+  const readDueDateInputValue = (value) => {
     const optionalValue = readOptionalFieldValue(value);
 
     if (!optionalValue) {
@@ -2890,10 +2939,15 @@ if (pageKey === 'booking-detail') {
 
       if (cancellationReasonGroup) {
         cancellationReasonGroup.hidden = !isCancelledStatus;
+        cancellationReasonGroup.style.display = isCancelledStatus ? '' : 'none';
       }
 
       if (cancellationReasonField) {
         cancellationReasonField.required = isCancelledStatus;
+
+        if (!isCancelledStatus) {
+          cancellationReasonField.value = '';
+        }
       }
     };
 
@@ -2920,9 +2974,9 @@ if (pageKey === 'booking-detail') {
       const updatePayload = {
         status: nextStatusValue,
         appointment_datetime: formatDateTimeToIsoUtc(appointmentField.value),
-        due_date: formatDueDateText(dueDateField.value),
-        price_quote: readOptionalFieldValue(priceQuoteField.value),
-        final_price: readOptionalFieldValue(finalPriceField.value),
+        due_date: readDueDateInputValue(dueDateField.value),
+        price_quote: readOptionalDecimalNumber(priceQuoteField.value),
+        final_price: readOptionalDecimalNumber(finalPriceField.value),
         cancellation_reason: isCancellingBooking ? cancellationReasonValue : null,
       };
 
