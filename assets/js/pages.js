@@ -2636,7 +2636,7 @@ if (pageKey === 'booking-detail') {
         <section class="booking-detail-group booking-manage-group" aria-label="Manage booking">
           <h3>Manage Booking</h3>
           <p class="booking-manage-copy">
-            As the assigned tailor, you can update the booking status, appointment date/time, and due date.
+            As the assigned tailor, you can update booking status, timing, and pricing details.
           </p>
           <form
             id="booking-manage-form"
@@ -2677,6 +2677,38 @@ if (pageKey === 'booking-detail') {
                 type="date"
                 value="${escapeHtml(formatDateForInput(dueDateValue))}"
               />
+            </div>
+
+            <div class="form-field">
+              <label for="manage-booking-price-quote">Price quote (optional)</label>
+              <input
+                id="manage-booking-price-quote"
+                name="price_quote"
+                type="text"
+                value="${escapeHtml(priceQuote || '')}"
+                placeholder="Example: 150.00"
+              />
+            </div>
+
+            <div class="form-field">
+              <label for="manage-booking-final-price">Final price (optional)</label>
+              <input
+                id="manage-booking-final-price"
+                name="final_price"
+                type="text"
+                value="${escapeHtml(finalPrice || '')}"
+                placeholder="Example: 175.00"
+              />
+            </div>
+
+            <div class="form-field" id="manage-booking-cancellation-reason-group" ${statusValue.toLowerCase() === 'cancelled' ? '' : 'hidden'}>
+              <label for="manage-booking-cancellation-reason">Cancellation reason</label>
+              <textarea
+                id="manage-booking-cancellation-reason"
+                name="cancellation_reason"
+                rows="3"
+                placeholder="Share why this booking was cancelled."
+              >${escapeHtml(cancellationReason || '')}</textarea>
             </div>
 
             <p id="booking-manage-message" class="validation-message">Use this form to update booking lifecycle fields.</p>
@@ -2795,19 +2827,14 @@ if (pageKey === 'booking-detail') {
     return trimmedValue ? trimmedValue : null;
   };
 
-  // Convert date and datetime-local input values into full ISO UTC strings.
+  // Convert datetime-local input values into full ISO UTC strings.
   // Xano expects timestamps with seconds + timezone (for example: ...:00.000Z).
   // This keeps empty fields as null and avoids sending partial date values.
-  const formatToIsoUtc = (value) => {
+  const formatDateTimeToIsoUtc = (value) => {
     const optionalValue = readOptionalFieldValue(value);
 
     if (!optionalValue) {
       return null;
-    }
-
-    // date input format: YYYY-MM-DD
-    if (/^\d{4}-\d{2}-\d{2}$/.test(optionalValue)) {
-      return `${optionalValue}T00:00:00.000Z`;
     }
 
     // datetime-local input format: YYYY-MM-DDTHH:mm
@@ -2818,6 +2845,18 @@ if (pageKey === 'booking-detail') {
     }
 
     return null;
+  };
+
+  // Keep due_date as plain YYYY-MM-DD text to match the expected booking field format.
+  // Empty or invalid values return null so optional handling stays consistent.
+  const formatDueDateText = (value) => {
+    const optionalValue = readOptionalFieldValue(value);
+
+    if (!optionalValue) {
+      return null;
+    }
+
+    return /^\d{4}-\d{2}-\d{2}$/.test(optionalValue) ? optionalValue : null;
   };
 
   // Attach form behavior after the tailor detail markup is in the DOM.
@@ -2833,11 +2872,33 @@ if (pageKey === 'booking-detail') {
     const statusField = document.querySelector('#manage-booking-status');
     const appointmentField = document.querySelector('#manage-booking-appointment');
     const dueDateField = document.querySelector('#manage-booking-due-date');
+    const priceQuoteField = document.querySelector('#manage-booking-price-quote');
+    const finalPriceField = document.querySelector('#manage-booking-final-price');
+    const cancellationReasonGroup = document.querySelector('#manage-booking-cancellation-reason-group');
+    const cancellationReasonField = document.querySelector('#manage-booking-cancellation-reason');
 
     const updateManageMessage = (message, stateClass = '') => {
       manageMessage.textContent = message;
       manageMessage.className = `validation-message ${stateClass}`.trim();
     };
+
+    // Keep cancellation behavior tied to status:
+    // - show cancellation reason only when "cancelled" is selected
+    // - otherwise hide it and remove required validation
+    const syncCancellationReasonVisibility = () => {
+      const isCancelledStatus = statusField.value.trim().toLowerCase() === 'cancelled';
+
+      if (cancellationReasonGroup) {
+        cancellationReasonGroup.hidden = !isCancelledStatus;
+      }
+
+      if (cancellationReasonField) {
+        cancellationReasonField.required = isCancelledStatus;
+      }
+    };
+
+    statusField.addEventListener('change', syncCancellationReasonVisibility);
+    syncCancellationReasonVisibility();
 
     manageForm.addEventListener('submit', async (event) => {
       event.preventDefault();
@@ -2848,10 +2909,21 @@ if (pageKey === 'booking-detail') {
       }
 
       const nextStatusValue = statusField.value.trim();
+      const isCancellingBooking = nextStatusValue.toLowerCase() === 'cancelled';
+      const cancellationReasonValue = readOptionalFieldValue(cancellationReasonField.value);
+
+      if (isCancellingBooking && !cancellationReasonValue) {
+        updateManageMessage('Please add a cancellation reason before saving a cancelled booking.', 'is-error');
+        return;
+      }
+
       const updatePayload = {
         status: nextStatusValue,
-        appointment_datetime: formatToIsoUtc(appointmentField.value),
-        due_date: formatToIsoUtc(dueDateField.value),
+        appointment_datetime: formatDateTimeToIsoUtc(appointmentField.value),
+        due_date: formatDueDateText(dueDateField.value),
+        price_quote: readOptionalFieldValue(priceQuoteField.value),
+        final_price: readOptionalFieldValue(finalPriceField.value),
+        cancellation_reason: isCancellingBooking ? cancellationReasonValue : null,
       };
 
       // Completion protection MVP:
